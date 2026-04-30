@@ -145,3 +145,46 @@ def test_summary_returns_all_fields():
     assert summary.correct_chars == 6
     assert summary.incorrect_chars == 0
     assert summary.extra_chars == 0
+
+
+def test_consistency_with_no_samples_is_100():
+    s = initial_state(("the",), "time", 60.0)
+    assert stats.consistency(s) == 100.0
+
+
+def test_consistency_with_one_sample_is_100():
+    s = initial_state(("the",), "time", 60.0)
+    s = replace(s, raw_per_second=(50.0,))
+    assert stats.consistency(s) == 100.0
+
+
+def test_consistency_with_constant_samples_is_100():
+    s = initial_state(("the",), "time", 60.0)
+    s = replace(s, raw_per_second=(60.0, 60.0, 60.0, 60.0))
+    # Zero variance → cv=0 → tanh(0)=0 → consistency = 100
+    assert math.isclose(stats.consistency(s), 100.0)
+
+
+def test_consistency_with_varying_samples_is_below_100():
+    s = initial_state(("the",), "time", 60.0)
+    s = replace(s, raw_per_second=(20.0, 80.0, 20.0, 80.0))
+    # High variance → cv > 0 → consistency < 100
+    assert stats.consistency(s) < 100.0
+    assert stats.consistency(s) > 0.0
+
+
+def test_consistency_with_all_zero_samples_is_100():
+    s = initial_state(("the",), "time", 60.0)
+    s = replace(s, raw_per_second=(0.0, 0.0, 0.0))
+    # Mean=0; treat as fully consistent (no variation).
+    assert stats.consistency(s) == 100.0
+
+
+def test_consistency_kogasa_formula():
+    # cv = stdev / mean; consistency = 100 * (1 - tanh(cv + cv³/3))
+    # Hand-verified: samples (40, 60), mean=50, variance=100, stdev=10, cv=0.2
+    # consistency = 100 * (1 - tanh(0.2 + 0.008/3)) = 100 * (1 - tanh(0.20267))
+    s = initial_state(("the",), "time", 60.0)
+    s = replace(s, raw_per_second=(40.0, 60.0))
+    expected = 100.0 * (1 - math.tanh(0.2 + (0.2 ** 3) / 3))
+    assert math.isclose(stats.consistency(s), expected)

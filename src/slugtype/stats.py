@@ -1,6 +1,7 @@
 """Pure stat functions over a TestState. No I/O."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from slugtype.state import TestState, WordEntry
@@ -84,3 +85,20 @@ def summary(state: TestState) -> Summary:
         incorrect_chars=incorrect_chars(state),
         extra_chars=extra_chars(state),
     )
+
+
+def consistency(state: TestState) -> float:
+    """Kogasa consistency: 100 * (1 - tanh(cv + cv³/3)) where cv = stdev/mean
+    over the per-second raw-WPM samples.
+    Returns 100.0 when there are fewer than 2 samples or the mean is 0.
+    """
+    samples = state.raw_per_second
+    if len(samples) < 2:
+        return 100.0
+    mean = sum(samples) / len(samples)
+    if mean == 0:
+        return 100.0
+    variance = sum((x - mean) ** 2 for x in samples) / len(samples)
+    stdev = math.sqrt(variance)
+    cv = stdev / mean
+    return 100.0 * (1 - math.tanh(cv + (cv ** 3) / 3))
