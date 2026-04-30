@@ -77,3 +77,44 @@ def test_char_after_finished_is_noop():
     s = replace(s, finished=True, ended_at=1.0)
     s2 = apply_keypress(s, _char("t"), now=2.0)
     assert s2 is s
+
+
+def _space() -> Key:
+    return Key(kind=KeyKind.SPACE)
+
+
+def test_space_at_word_start_is_noop():
+    s = initial_state(("the", "and"), "time", 60.0)
+    s2 = apply_keypress(s, _space(), now=1.0)
+    assert s2 is s
+
+
+def test_space_after_chars_submits_word_and_advances():
+    s = initial_state(("the", "and"), "time", 60.0)
+    for c in "the":
+        s = apply_keypress(s, _char(c), now=1.0)
+    s = apply_keypress(s, _space(), now=2.0)
+    assert s.words[0].submitted is True
+    assert s.current_index == 1
+    assert s.finished is False
+
+
+def test_space_on_last_word_in_words_mode_finishes_test():
+    s = initial_state(("the",), "words", duration_s=0.0)
+    for c in "the":
+        s = apply_keypress(s, _char(c), now=1.0)
+    s = apply_keypress(s, _space(), now=2.5)
+    assert s.finished is True
+    assert s.ended_at == 2.5
+    assert s.words[0].submitted is True
+    # current_index does not advance past the last word
+    assert s.current_index == 0
+
+
+def test_space_on_last_word_in_time_mode_does_not_finish():
+    s = initial_state(("the",), "time", duration_s=60.0)
+    for c in "the":
+        s = apply_keypress(s, _char(c), now=1.0)
+    s = apply_keypress(s, _space(), now=2.5)
+    assert s.finished is False
+    assert s.ended_at is None

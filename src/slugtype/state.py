@@ -52,6 +52,8 @@ def apply_keypress(state: TestState, key: Key, now: float) -> TestState:
         return state
     if key.kind is KeyKind.CHAR:
         return _apply_char(state, key.char, now)
+    if key.kind is KeyKind.SPACE:
+        return _apply_space(state, now)
     return state
 
 
@@ -74,3 +76,22 @@ def _apply_char(state: TestState, ch: str, now: float) -> TestState:
     )
     new_words = state.words[: state.current_index] + (new_word,) + state.words[state.current_index + 1 :]
     return replace(state, words=new_words, started_at=started_at)
+
+
+def _apply_space(state: TestState, now: float) -> TestState:
+    current = state.words[state.current_index]
+    if len(current.typed) == 0:
+        return state  # no-op at word start
+    new_word = WordEntry(
+        expected=current.expected,
+        typed=current.typed,
+        submitted=True,
+    )
+    new_words = state.words[: state.current_index] + (new_word,) + state.words[state.current_index + 1 :]
+    is_last = state.current_index == len(state.words) - 1
+    if is_last and state.mode == "words":
+        return replace(state, words=new_words, finished=True, ended_at=now)
+    if is_last:
+        # In time mode, last word submitted — but timer still controls end. Stay on last index.
+        return replace(state, words=new_words)
+    return replace(state, words=new_words, current_index=state.current_index + 1)
