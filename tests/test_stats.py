@@ -1,7 +1,11 @@
 """Tests for slugtype.stats — pure stat formulas over finalized state."""
+import math
+
+from dataclasses import replace
+
 from slugtype import stats
 from slugtype.input import Key, KeyKind
-from slugtype.state import apply_keypress, initial_state
+from slugtype.state import apply_keypress, initial_state, tick
 
 
 def _char(c: str) -> Key:
@@ -61,3 +65,83 @@ def test_accuracy_half_half():
 def test_accuracy_empty_state_is_100():
     s = initial_state(("the",), "time", 60.0)
     assert stats.accuracy(s) == 100.0
+
+
+def _finalize_time_mode(s, started_at, duration_s):
+    """Helper: apply time-mode finish to a state for stat tests."""
+    return replace(
+        s,
+        started_at=started_at,
+        ended_at=started_at + duration_s,
+        finished=True,
+    )
+
+
+def test_wpm_zero_when_no_words_submitted():
+    s = initial_state(("the",), "time", 60.0)
+    for c in "th":  # typed but not submitted
+        s = apply_keypress(s, _char(c), now=1.0)
+    s = _finalize_time_mode(s, started_at=1.0, duration_s=60.0)
+    assert stats.wpm(s) == 0.0
+
+
+def test_wpm_zero_when_started_at_is_none():
+    s = initial_state(("the",), "time", 60.0)
+    assert stats.wpm(s) == 0.0
+
+
+def test_wpm_one_correct_word_60s():
+    s = initial_state(("the", "and"), "time", 60.0)
+    s = _type_words(s, [("the", True)])
+    s = _finalize_time_mode(s, started_at=1.0, duration_s=60.0)
+    # correct_word_chars=3 ("the"), correct_spaces=0
+    # wpm = (3 + 0) * 60 / 60 / 5 = 0.6
+    assert math.isclose(stats.wpm(s), 0.6)
+
+
+def test_wpm_two_correct_words_60s():
+    s = initial_state(("the", "and", "go"), "time", 60.0)
+    s = _type_words(s, [("the", True), ("and", True)])
+    s = _finalize_time_mode(s, started_at=1.0, duration_s=60.0)
+    # correct_word_chars=6, correct_spaces=1
+    # wpm = (6 + 1) * 60 / 60 / 5 = 1.4
+    assert math.isclose(stats.wpm(s), 1.4)
+
+
+def test_wpm_incorrect_word_breaks_correct_spaces_chain():
+    s = initial_state(("the", "and", "go"), "time", 60.0)
+    s = _type_words(s, [("the", True), ("axd", True), ("go", True)])
+    s = _finalize_time_mode(s, started_at=1.0, duration_s=60.0)
+    # correct_word_chars = 3 + 2 = 5, correct_spaces = 0
+    # wpm = (5 + 0) * 60 / 60 / 5 = 1.0
+    assert math.isclose(stats.wpm(s), 1.0)
+
+
+def test_wpm_extras_disqualify_a_word():
+    s = initial_state(("the", "and"), "time", 60.0)
+    s = _type_words(s, [("thee", True), ("and", True)])
+    # "thee" has 3 correct + 1 extra → not fully correct
+    s = _finalize_time_mode(s, started_at=1.0, duration_s=60.0)
+    assert math.isclose(stats.wpm(s), (3 + 0) * 60 / 60 / 5)
+
+
+def test_raw_wpm_counts_all_typed_chars_plus_submitted_spaces():
+    s = initial_state(("the", "and"), "time", 60.0)
+    s = _type_words(s, [("thee", True), ("and", True)])
+    # typed: 4 + 3 = 7 chars; submitted spaces = 2
+    # raw = (7 + 2) * 60 / 60 / 5 = 1.8
+    s = _finalize_time_mode(s, started_at=1.0, duration_s=60.0)
+    assert math.isclose(stats.raw_wpm(s), 1.8)
+
+
+def test_summary_returns_all_fields():
+    s = initial_state(("the", "and"), "time", 60.0)
+    s = _type_words(s, [("the", True), ("and", True)])
+    s = _finalize_time_mode(s, started_at=1.0, duration_s=60.0)
+    summary = stats.summary(s)
+    assert math.isclose(summary.wpm, 1.4)
+    assert math.isclose(summary.raw_wpm, (6 + 2) * 60 / 60 / 5)
+    assert summary.accuracy == 100.0
+    assert summary.correct_chars == 6
+    assert summary.incorrect_chars == 0
+    assert summary.extra_chars == 0
