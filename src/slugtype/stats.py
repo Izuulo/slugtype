@@ -33,6 +33,7 @@ class Summary:
     wpm: float
     raw_wpm: float
     accuracy: float
+    consistency: float
     correct_chars: int
     incorrect_chars: int
     extra_chars: int
@@ -81,6 +82,7 @@ def summary(state: TestState) -> Summary:
         wpm=wpm(state),
         raw_wpm=raw_wpm(state),
         accuracy=accuracy(state),
+        consistency=consistency(state),
         correct_chars=correct_chars(state),
         incorrect_chars=incorrect_chars(state),
         extra_chars=extra_chars(state),

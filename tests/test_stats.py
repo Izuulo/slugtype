@@ -215,3 +215,12 @@ def test_live_wpm_uses_elapsed_not_ended_at():
     s = replace(s, started_at=0.0)
     # 'the' isn't submitted → not fully correct → 0 wpm
     assert stats.live_wpm(s, now=15.0) == 0.0
+
+
+def test_summary_includes_consistency():
+    s = initial_state(("the",), "time", 60.0)
+    s = _type_words(s, [("the", False)])
+    s = _finalize_time_mode(s, started_at=1.0, duration_s=60.0)
+    s = replace(s, raw_per_second=(60.0, 60.0))  # constant samples → 100% consistency
+    summary = stats.summary(s)
+    assert summary.consistency == 100.0
