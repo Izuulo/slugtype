@@ -10,6 +10,13 @@ class KeyKind(Enum):
     CHAR = auto()
     SPACE = auto()
     BACKSPACE = auto()
+    TAB = auto()
+    ESC = auto()
+    ENTER = auto()
+    UP = auto()
+    DOWN = auto()
+    LEFT = auto()
+    RIGHT = auto()
     CTRL_C = auto()
     RESIZE = auto()
     UNKNOWN = auto()
@@ -24,8 +31,22 @@ class Key:
 def translate(keycode: int) -> Key:
     if keycode == -1:
         return Key(kind=KeyKind.UNKNOWN)
-    if keycode == 3:  # Ctrl-C
+    if keycode == 3:
         return Key(kind=KeyKind.CTRL_C)
+    if keycode == 9:
+        return Key(kind=KeyKind.TAB)
+    if keycode == 27:
+        return Key(kind=KeyKind.ESC)
+    if keycode in (10, 13, curses.KEY_ENTER):
+        return Key(kind=KeyKind.ENTER)
+    if keycode == curses.KEY_UP:
+        return Key(kind=KeyKind.UP)
+    if keycode == curses.KEY_DOWN:
+        return Key(kind=KeyKind.DOWN)
+    if keycode == curses.KEY_LEFT:
+        return Key(kind=KeyKind.LEFT)
+    if keycode == curses.KEY_RIGHT:
+        return Key(kind=KeyKind.RIGHT)
     if keycode == curses.KEY_RESIZE:
         return Key(kind=KeyKind.RESIZE)
     if keycode in (curses.KEY_BACKSPACE, 127, 8):

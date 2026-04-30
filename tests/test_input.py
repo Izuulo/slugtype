@@ -41,3 +41,24 @@ def test_translate_no_input_returns_unknown():
 
 def test_translate_arbitrary_other_returns_unknown():
     assert translate(99999).kind is KeyKind.UNKNOWN
+
+
+def test_translate_tab_returns_tab():
+    assert translate(9).kind is KeyKind.TAB
+
+
+def test_translate_esc_returns_esc():
+    assert translate(27).kind is KeyKind.ESC
+
+
+def test_translate_enter_returns_enter():
+    assert translate(10).kind is KeyKind.ENTER
+    assert translate(13).kind is KeyKind.ENTER
+    assert translate(curses.KEY_ENTER).kind is KeyKind.ENTER
+
+
+def test_translate_arrows():
+    assert translate(curses.KEY_UP).kind is KeyKind.UP
+    assert translate(curses.KEY_DOWN).kind is KeyKind.DOWN
+    assert translate(curses.KEY_LEFT).kind is KeyKind.LEFT
+    assert translate(curses.KEY_RIGHT).kind is KeyKind.RIGHT
