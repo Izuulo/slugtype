@@ -33,6 +33,7 @@ class TestState:
     duration_s: float
     mode: Mode
     finished: bool
+    raw_per_second: tuple[float, ...] = ()
 
 
 def initial_state(words: tuple[str, ...], mode: Mode, duration_s: float) -> TestState:
@@ -44,6 +45,7 @@ def initial_state(words: tuple[str, ...], mode: Mode, duration_s: float) -> Test
         duration_s=duration_s,
         mode=mode,
         finished=False,
+        raw_per_second=(),
     )
 
 

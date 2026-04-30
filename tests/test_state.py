@@ -189,3 +189,8 @@ def test_tick_in_words_mode_is_noop():
     s = apply_keypress(s, _char("t"), now=1.0)
     s2 = tick(s, now=999.0)
     assert s2.finished is False
+
+
+def test_initial_state_has_empty_raw_per_second():
+    s = initial_state(("the",), "time", 60.0)
+    assert s.raw_per_second == ()
