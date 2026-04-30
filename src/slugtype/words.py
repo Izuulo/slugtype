@@ -17,3 +17,13 @@ def load(name: str) -> tuple[str, ...]:
     if not word_list:
         raise ValueError(f"word list {name!r} is empty")
     return word_list
+
+
+def sample(word_list: tuple[str, ...], n: int, rng: random.Random) -> tuple[str, ...]:
+    """Sample n words from word_list with replacement using the provided RNG.
+
+    n may exceed len(word_list); n=0 returns an empty tuple.
+    """
+    if n <= 0:
+        return ()
+    return tuple(rng.choice(word_list) for _ in range(n))
