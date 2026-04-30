@@ -54,6 +54,8 @@ def apply_keypress(state: TestState, key: Key, now: float) -> TestState:
         return _apply_char(state, key.char, now)
     if key.kind is KeyKind.SPACE:
         return _apply_space(state, now)
+    if key.kind is KeyKind.BACKSPACE:
+        return _apply_backspace(state)
     return state
 
 
@@ -95,3 +97,28 @@ def _apply_space(state: TestState, now: float) -> TestState:
         # In time mode, last word submitted — but timer still controls end. Stay on last index.
         return replace(state, words=new_words)
     return replace(state, words=new_words, current_index=state.current_index + 1)
+
+
+def _apply_backspace(state: TestState) -> TestState:
+    current = state.words[state.current_index]
+    if len(current.typed) == 0:
+        return state
+    new_word = WordEntry(
+        expected=current.expected,
+        typed=current.typed[:-1],
+        submitted=current.submitted,
+    )
+    new_words = state.words[: state.current_index] + (new_word,) + state.words[state.current_index + 1 :]
+    return replace(state, words=new_words)
+
+
+def tick(state: TestState, now: float) -> TestState:
+    if state.finished:
+        return state
+    if state.mode != "time":
+        return state
+    if state.started_at is None:
+        return state
+    if now - state.started_at >= state.duration_s:
+        return replace(state, finished=True, ended_at=now)
+    return state

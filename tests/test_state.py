@@ -118,3 +118,74 @@ def test_space_on_last_word_in_time_mode_does_not_finish():
     s = apply_keypress(s, _space(), now=2.5)
     assert s.finished is False
     assert s.ended_at is None
+
+
+def _backspace() -> Key:
+    return Key(kind=KeyKind.BACKSPACE)
+
+
+def test_backspace_pops_one_typed_char():
+    s = initial_state(("the",), "time", 60.0)
+    for c in "th":
+        s = apply_keypress(s, _char(c), now=1.0)
+    s = apply_keypress(s, _backspace(), now=2.0)
+    assert s.words[0].typed == (TypedChar("t", "t", "correct"),)
+
+
+def test_backspace_at_word_start_is_noop():
+    s = initial_state(("the",), "time", 60.0)
+    s2 = apply_keypress(s, _backspace(), now=1.0)
+    assert s2 is s
+
+
+def test_backspace_does_not_cross_word_boundary():
+    s = initial_state(("the", "and"), "time", 60.0)
+    for c in "the":
+        s = apply_keypress(s, _char(c), now=1.0)
+    s = apply_keypress(s, _space(), now=2.0)
+    # Now on word 1 with no typed chars — backspace must be no-op, not jump back
+    s2 = apply_keypress(s, _backspace(), now=2.5)
+    assert s2.current_index == 1
+    assert s2.words[0].submitted is True
+    assert s2.words[0].typed == (
+        TypedChar("t", "t", "correct"),
+        TypedChar("h", "h", "correct"),
+        TypedChar("e", "e", "correct"),
+    )
+
+
+def test_backspace_does_not_set_started_at():
+    s = initial_state(("the",), "time", 60.0)
+    s2 = apply_keypress(s, _backspace(), now=5.0)
+    assert s2.started_at is None
+
+
+from slugtype.state import tick
+
+
+def test_tick_in_time_mode_finishes_when_duration_elapsed():
+    s = initial_state(("the",), "time", duration_s=10.0)
+    s = apply_keypress(s, _char("t"), now=100.0)
+    s = tick(s, now=110.0)
+    assert s.finished is True
+    assert s.ended_at == 110.0
+
+
+def test_tick_in_time_mode_does_not_finish_before_duration():
+    s = initial_state(("the",), "time", duration_s=10.0)
+    s = apply_keypress(s, _char("t"), now=100.0)
+    s = tick(s, now=105.0)
+    assert s.finished is False
+
+
+def test_tick_in_time_mode_with_no_started_at_is_noop():
+    s = initial_state(("the",), "time", duration_s=10.0)
+    s2 = tick(s, now=200.0)
+    assert s2 is s
+
+
+def test_tick_in_words_mode_is_noop():
+    s = initial_state(("the",), "words", duration_s=0.0)
+    s = apply_keypress(s, _char("t"), now=1.0)
+    s2 = tick(s, now=999.0)
+    assert s2.finished is False
