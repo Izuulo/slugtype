@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from slugtype.input import Key
+from slugtype.input import Key, KeyKind
 
 Category = Literal["correct", "incorrect", "extra"]
 Mode = Literal["time", "words"]
@@ -45,3 +45,32 @@ def initial_state(words: tuple[str, ...], mode: Mode, duration_s: float) -> Test
         mode=mode,
         finished=False,
     )
+
+
+def apply_keypress(state: TestState, key: Key, now: float) -> TestState:
+    if state.finished:
+        return state
+    if key.kind is KeyKind.CHAR:
+        return _apply_char(state, key.char, now)
+    return state
+
+
+def _apply_char(state: TestState, ch: str, now: float) -> TestState:
+    started_at = state.started_at if state.started_at is not None else now
+    current = state.words[state.current_index]
+    typed_index = len(current.typed)
+    expected = current.expected
+    if typed_index < len(expected):
+        if ch == expected[typed_index]:
+            entry = TypedChar(expected[typed_index], ch, "correct")
+        else:
+            entry = TypedChar(expected[typed_index], ch, "incorrect")
+    else:
+        entry = TypedChar("", ch, "extra")
+    new_word = WordEntry(
+        expected=current.expected,
+        typed=current.typed + (entry,),
+        submitted=current.submitted,
+    )
+    new_words = state.words[: state.current_index] + (new_word,) + state.words[state.current_index + 1 :]
+    return replace(state, words=new_words, started_at=started_at)
