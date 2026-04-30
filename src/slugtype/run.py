@@ -8,7 +8,7 @@ from typing import Optional
 
 from slugtype import render, stats, words
 from slugtype.input import KeyKind, translate
-from slugtype.state import TestState, apply_keypress, initial_state, tick
+from slugtype.state import TestState, apply_keypress, append_sample, initial_state, tick
 from slugtype.terminal import TerminalTooSmallError, session
 from slugtype.theme import init_pairs
 
@@ -61,6 +61,7 @@ def run_test(config: Config) -> Optional[stats.Summary]:
             theme = init_pairs()
             window.timeout(50)  # ms; getch blocks up to this long
             last_tick = 0.0
+            typed_at_last_sample = 0
             init_now = time.monotonic()
             render.draw(window, state, theme, label, init_now, _live_wpm_for_config(state, init_now, config))
 
@@ -84,6 +85,12 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                 if state.started_at is not None and (now - last_tick) >= 1.0:
                     last_tick = now
                     new_state = tick(state, now)
+                    # Append a per-second raw WPM sample: chars typed in the last second
+                    chars_now = sum(len(w.typed) for w in state.words) + sum(1 for w in state.words if w.submitted)
+                    delta_chars = chars_now - typed_at_last_sample
+                    typed_at_last_sample = chars_now
+                    sample_wpm = delta_chars * 60.0 / 5.0  # delta over 1 second, normalised to wpm
+                    new_state = append_sample(new_state, sample_wpm)
                     state = new_state  # may or may not be the same object; redraw either way to update countdown
                     render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
 
