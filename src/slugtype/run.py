@@ -19,6 +19,7 @@ class Config:
     duration_s: float   # used when mode == "time"
     word_count: int     # used when mode == "words"
     language: str       # "english-200" at v0.1
+    show_live_wpm: bool = True
 
 
 def _config_label(config: Config) -> str:
