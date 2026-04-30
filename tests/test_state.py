@@ -194,3 +194,17 @@ def test_tick_in_words_mode_is_noop():
 def test_initial_state_has_empty_raw_per_second():
     s = initial_state(("the",), "time", 60.0)
     assert s.raw_per_second == ()
+
+
+from slugtype.state import append_sample
+
+
+def test_append_sample_returns_new_state_with_sample_appended():
+    s = initial_state(("the",), "time", 60.0)
+    s2 = append_sample(s, 42.0)
+    assert s2.raw_per_second == (42.0,)
+    s3 = append_sample(s2, 50.0)
+    assert s3.raw_per_second == (42.0, 50.0)
+    # Original states are unmodified.
+    assert s.raw_per_second == ()
+    assert s2.raw_per_second == (42.0,)

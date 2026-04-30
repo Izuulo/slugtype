@@ -124,3 +124,8 @@ def tick(state: TestState, now: float) -> TestState:
     if now - state.started_at >= state.duration_s:
         return replace(state, finished=True, ended_at=now)
     return state
+
+
+def append_sample(state: TestState, sample: float) -> TestState:
+    """Return a new state with `sample` appended to raw_per_second."""
+    return replace(state, raw_per_second=state.raw_per_second + (sample,))
