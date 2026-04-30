@@ -82,6 +82,23 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                 if state.finished:
                     final_state = state
                     break
+
+            # Test finished naturally: show the result screen and wait for a keypress.
+            if not aborted:
+                summary = stats.summary(final_state)
+                elapsed = (final_state.ended_at - final_state.started_at) if final_state.started_at and final_state.ended_at else 0.0
+                render.draw_result_screen(window, summary, label, theme, elapsed)
+                window.timeout(-1)  # block until a key arrives
+                while True:
+                    keycode = window.getch()
+                    if keycode == -1:
+                        continue
+                    key = translate(keycode)
+                    if key.kind is KeyKind.RESIZE:
+                        render.draw_result_screen(window, summary, label, theme, elapsed)
+                        continue
+                    # Any key (including Ctrl-C) exits.
+                    break
     except KeyboardInterrupt:
         aborted = True
     except TerminalTooSmallError:
