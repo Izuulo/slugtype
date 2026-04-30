@@ -28,6 +28,12 @@ def _config_label(config: Config) -> str:
     return f"{config.word_count} words · {config.language}"
 
 
+def _live_wpm_for_config(state: TestState, now: float, config: Config) -> Optional[float]:
+    if not config.show_live_wpm:
+        return None
+    return stats.live_wpm(state, now)
+
+
 def _build_initial_state(config: Config, rng: random.Random) -> TestState:
     word_pool = words.load(config.language)
     if config.mode == "time":
@@ -55,7 +61,8 @@ def run_test(config: Config) -> Optional[stats.Summary]:
             theme = init_pairs()
             window.timeout(50)  # ms; getch blocks up to this long
             last_tick = 0.0
-            render.draw(window, state, theme, label, time.monotonic())
+            init_now = time.monotonic()
+            render.draw(window, state, theme, label, init_now, _live_wpm_for_config(state, init_now, config))
 
             while True:
                 now = time.monotonic()
@@ -67,18 +74,18 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                         aborted = True
                         break
                     if key.kind is KeyKind.RESIZE:
-                        render.draw(window, state, theme, label, now)
+                        render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
                         continue
                     new_state = apply_keypress(state, key, now)
                     if new_state is not state:
                         state = new_state
-                        render.draw(window, state, theme, label, now)
+                        render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
 
                 if state.started_at is not None and (now - last_tick) >= 1.0:
                     last_tick = now
                     new_state = tick(state, now)
                     state = new_state  # may or may not be the same object; redraw either way to update countdown
-                    render.draw(window, state, theme, label, now)
+                    render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
 
                 if state.finished:
                     final_state = state

@@ -7,11 +7,11 @@ from slugtype.state import TestState
 from slugtype.theme import Theme
 
 
-def draw(window: "curses.window", state: TestState, theme: Theme, config_label: str, now: float) -> None:
+def draw(window: "curses.window", state: TestState, theme: Theme, config_label: str, now: float, live_wpm_value: float | None = None) -> None:
     window.erase()
     draw_top_bar(window, config_label, theme)
     draw_word_stream(window, state, theme)
-    draw_bottom_bar(window, state, theme, now)
+    draw_bottom_bar(window, state, theme, now, live_wpm_value)
     window.refresh()
 
 
@@ -138,7 +138,7 @@ def _layout_lines(
     return lines, caret_line
 
 
-def draw_bottom_bar(window: "curses.window", state: TestState, theme: Theme, now: float) -> None:
+def draw_bottom_bar(window: "curses.window", state: TestState, theme: Theme, now: float, live_wpm_value: float | None = None) -> None:
     rows, cols = window.getmaxyx()
     y = rows - 2
 
@@ -151,8 +151,12 @@ def draw_bottom_bar(window: "curses.window", state: TestState, theme: Theme, now
         left = format_progress(state, elapsed=elapsed)
         center = ""
 
-    pad_right = max(0, cols - len(left) - len(center) - 4)
-    text = f" {left}  {center}{' ' * pad_right} "
+    right = ""
+    if live_wpm_value is not None and state.started_at is not None and not state.finished:
+        right = f"{round(live_wpm_value)} wpm"
+
+    pad = max(1, cols - len(left) - len(center) - len(right) - 4)
+    text = f" {left}  {center}{' ' * pad}{right} "
     text = text[:cols]
     window.addstr(y, 0, text, theme.fg_dim)
 
