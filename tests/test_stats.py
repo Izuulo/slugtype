@@ -188,3 +188,30 @@ def test_consistency_kogasa_formula():
     s = replace(s, raw_per_second=(40.0, 60.0))
     expected = 100.0 * (1 - math.tanh(0.2 + (0.2 ** 3) / 3))
     assert math.isclose(stats.consistency(s), expected)
+
+
+def test_live_wpm_zero_when_started_at_is_none():
+    s = initial_state(("the",), "time", 60.0)
+    assert stats.live_wpm(s, now=10.0) == 0.0
+
+
+def test_live_wpm_zero_when_no_elapsed():
+    s = initial_state(("the",), "time", 60.0)
+    s = replace(s, started_at=10.0)
+    assert stats.live_wpm(s, now=10.0) == 0.0
+
+
+def test_live_wpm_one_correct_word_after_30s():
+    s = initial_state(("the", "and"), "time", 60.0)
+    s = _type_words(s, [("the", True)])
+    s = replace(s, started_at=0.0)
+    # correct_word_chars=3, correct_spaces=0; elapsed=30 → wpm = 3 * 60 / 30 / 5 = 1.2
+    assert math.isclose(stats.live_wpm(s, now=30.0), 1.2)
+
+
+def test_live_wpm_uses_elapsed_not_ended_at():
+    s = initial_state(("the",), "time", 60.0)
+    s = _type_words(s, [("the", False)])
+    s = replace(s, started_at=0.0)
+    # 'the' isn't submitted → not fully correct → 0 wpm
+    assert stats.live_wpm(s, now=15.0) == 0.0

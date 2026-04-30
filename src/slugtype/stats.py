@@ -102,3 +102,23 @@ def consistency(state: TestState) -> float:
     stdev = math.sqrt(variance)
     cv = stdev / mean
     return 100.0 * (1 - math.tanh(cv + (cv ** 3) / 3))
+
+
+def live_wpm(state: TestState, now: float) -> float:
+    """Current WPM using elapsed = now - started_at as the denominator.
+    Same fully-correct-word logic as wpm(). Returns 0.0 if not started.
+    """
+    if state.started_at is None:
+        return 0.0
+    elapsed = now - state.started_at
+    if elapsed <= 0:
+        return 0.0
+    fully_correct = [_is_fully_correct(w) for w in state.words]
+    correct_word_chars = sum(
+        len(w.expected) for w, ok in zip(state.words, fully_correct) if ok
+    )
+    correct_spaces = 0
+    for i in range(len(fully_correct) - 1):
+        if fully_correct[i] and fully_correct[i + 1]:
+            correct_spaces += 1
+    return (correct_word_chars + correct_spaces) * 60.0 / elapsed / 5.0
