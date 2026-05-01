@@ -45,6 +45,117 @@ def _build_initial_state(config: Config, rng: random.Random) -> TestState:
     return initial_state(sample, "words", duration_s=0.0)
 
 
+TIME_CHOICES = (15, 30, 60, 120)
+WORDS_CHOICES = (10, 25, 50, 100)
+LANGUAGES = ("english-200", "english-1k")
+
+
+@dataclass
+class MenuState:
+    mode: str
+    time_length: int
+    words_count: int
+    language: str
+    show_live_wpm: bool
+    selected: int = 0
+
+
+def _menu_state_from_config(config: Config) -> MenuState:
+    return MenuState(
+        mode=config.mode,
+        time_length=int(config.duration_s) if config.mode == "time" else TIME_CHOICES[2],
+        words_count=config.word_count if config.mode == "words" else WORDS_CHOICES[1],
+        language=config.language,
+        show_live_wpm=config.show_live_wpm,
+    )
+
+
+def _config_from_menu(menu: MenuState) -> Config:
+    if menu.mode == "time":
+        return Config(
+            mode="time",
+            duration_s=float(menu.time_length),
+            word_count=0,
+            language=menu.language,
+            show_live_wpm=menu.show_live_wpm,
+        )
+    return Config(
+        mode="words",
+        duration_s=0.0,
+        word_count=menu.words_count,
+        language=menu.language,
+        show_live_wpm=menu.show_live_wpm,
+    )
+
+
+def _menu_items(menu: MenuState) -> list[tuple[str, str]]:
+    if menu.mode == "time":
+        length_label = "duration"
+        length_value = f"{menu.time_length}s"
+    else:
+        length_label = "words"
+        length_value = str(menu.words_count)
+    return [
+        ("mode", menu.mode),
+        (length_label, length_value),
+        ("language", menu.language),
+        ("live wpm", "on" if menu.show_live_wpm else "off"),
+    ]
+
+
+def _cycle(values, current, direction: int):
+    if current not in values:
+        return values[0]
+    idx = values.index(current)
+    return values[(idx + direction) % len(values)]
+
+
+def _menu_apply_arrow(menu: MenuState, key) -> MenuState:
+    if key.kind is KeyKind.UP:
+        menu.selected = (menu.selected - 1) % 4
+    elif key.kind is KeyKind.DOWN:
+        menu.selected = (menu.selected + 1) % 4
+    elif key.kind in (KeyKind.LEFT, KeyKind.RIGHT):
+        direction = -1 if key.kind is KeyKind.LEFT else 1
+        if menu.selected == 0:
+            menu.mode = _cycle(("time", "words"), menu.mode, direction)
+        elif menu.selected == 1:
+            if menu.mode == "time":
+                menu.time_length = _cycle(TIME_CHOICES, menu.time_length, direction)
+            else:
+                menu.words_count = _cycle(WORDS_CHOICES, menu.words_count, direction)
+        elif menu.selected == 2:
+            menu.language = _cycle(LANGUAGES, menu.language, direction)
+        elif menu.selected == 3:
+            menu.show_live_wpm = not menu.show_live_wpm
+    return menu
+
+
+def _open_menu(window, theme, current_config: Config) -> Optional[Config]:
+    """Show the menu modal. Returns the new Config if Enter was pressed,
+    or None if Esc was pressed to cancel.
+    """
+    menu = _menu_state_from_config(current_config)
+    window.timeout(-1)
+    try:
+        while True:
+            render.draw_menu(window, _menu_items(menu), menu.selected, theme)
+            keycode = window.getch()
+            if keycode == -1:
+                continue
+            key = translate(keycode)
+            if key.kind is KeyKind.ESC or key.kind is KeyKind.CTRL_C:
+                return None
+            if key.kind is KeyKind.ENTER:
+                return _config_from_menu(menu)
+            if key.kind is KeyKind.RESIZE:
+                continue
+            if key.kind in (KeyKind.UP, KeyKind.DOWN, KeyKind.LEFT, KeyKind.RIGHT):
+                menu = _menu_apply_arrow(menu, key)
+    finally:
+        window.timeout(50)
+
+
 def run_test(config: Config) -> Optional[stats.Summary]:
     """Run tests in a loop, supporting tab restart. Returns the last summary
     on natural exit, or None if the user aborted (Ctrl-C).
@@ -77,6 +188,12 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                             aborted = True
                             break
                         if key.kind is KeyKind.TAB:
+                            restart_requested = True
+                            break
+                        if key.kind is KeyKind.ESC:
+                            new_config = _open_menu(window, theme, config)
+                            if new_config is not None:
+                                config = new_config
                             restart_requested = True
                             break
                         if key.kind is KeyKind.RESIZE:
@@ -121,6 +238,12 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                         render.draw_result_screen(window, state, summary, label, theme)
                         continue
                     if key.kind is KeyKind.TAB:
+                        action = "restart"
+                        break
+                    if key.kind is KeyKind.ESC:
+                        new_config = _open_menu(window, theme, config)
+                        if new_config is not None:
+                            config = new_config
                         action = "restart"
                         break
                     # Any other key exits.
