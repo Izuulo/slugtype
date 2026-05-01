@@ -46,79 +46,95 @@ def _build_initial_state(config: Config, rng: random.Random) -> TestState:
 
 
 def run_test(config: Config) -> Optional[stats.Summary]:
-    """Run a single test. Returns the summary on natural completion, or None
-    if the user aborted (Ctrl-C).
+    """Run tests in a loop, supporting tab restart. Returns the last summary
+    on natural exit, or None if the user aborted (Ctrl-C).
     """
     rng = random.Random()
-    state = _build_initial_state(config, rng)
-    label = _config_label(config)
-
     aborted = False
-    final_state = state
+    last_summary: Optional[stats.Summary] = None
 
     try:
         with session() as window:
             theme = init_pairs()
-            window.timeout(50)  # ms; getch blocks up to this long
-            last_tick = 0.0
-            typed_at_last_sample = 0
-            init_now = time.monotonic()
-            render.draw(window, state, theme, label, init_now, _live_wpm_for_config(state, init_now, config))
+            window.timeout(50)
 
             while True:
-                now = time.monotonic()
+                state = _build_initial_state(config, rng)
+                label = _config_label(config)
+                last_tick = 0.0
+                typed_at_last_sample = 0
+                init_now = time.monotonic()
+                render.draw(window, state, theme, label, init_now, _live_wpm_for_config(state, init_now, config))
 
-                keycode = window.getch()
-                if keycode != -1:
-                    key = translate(keycode)
-                    if key.kind is KeyKind.CTRL_C:
-                        aborted = True
-                        break
-                    if key.kind is KeyKind.RESIZE:
-                        render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
-                        continue
-                    new_state = apply_keypress(state, key, now)
-                    if new_state is not state:
+                restart_requested = False
+                while True:
+                    now = time.monotonic()
+
+                    keycode = window.getch()
+                    if keycode != -1:
+                        key = translate(keycode)
+                        if key.kind is KeyKind.CTRL_C:
+                            aborted = True
+                            break
+                        if key.kind is KeyKind.TAB:
+                            restart_requested = True
+                            break
+                        if key.kind is KeyKind.RESIZE:
+                            render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
+                            continue
+                        new_state = apply_keypress(state, key, now)
+                        if new_state is not state:
+                            state = new_state
+                            render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
+
+                    if state.started_at is not None and (now - last_tick) >= 1.0:
+                        last_tick = now
+                        new_state = tick(state, now)
+                        chars_now = sum(len(w.typed) for w in state.words) + sum(1 for w in state.words if w.submitted)
+                        delta_chars = chars_now - typed_at_last_sample
+                        typed_at_last_sample = chars_now
+                        sample_wpm = delta_chars * 60.0 / 5.0
+                        new_state = append_sample(new_state, sample_wpm)
                         state = new_state
                         render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
 
-                if state.started_at is not None and (now - last_tick) >= 1.0:
-                    last_tick = now
-                    new_state = tick(state, now)
-                    # Append a per-second raw WPM sample: chars typed in the last second
-                    chars_now = sum(len(w.typed) for w in state.words) + sum(1 for w in state.words if w.submitted)
-                    delta_chars = chars_now - typed_at_last_sample
-                    typed_at_last_sample = chars_now
-                    sample_wpm = delta_chars * 60.0 / 5.0  # delta over 1 second, normalised to wpm
-                    new_state = append_sample(new_state, sample_wpm)
-                    state = new_state  # may or may not be the same object; redraw either way to update countdown
-                    render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
+                    if state.finished:
+                        break
 
-                if state.finished:
-                    final_state = state
+                if aborted:
                     break
+                if restart_requested:
+                    continue  # outer while: build a fresh state and run again
 
-            # Test finished naturally: show the result screen and wait for a keypress.
-            if not aborted:
-                summary = stats.summary(final_state)
-                render.draw_result_screen(window, final_state, summary, label, theme)
-                window.timeout(-1)  # block until a key arrives
+                # Test finished naturally — show result screen.
+                summary = stats.summary(state)
+                last_summary = summary
+                render.draw_result_screen(window, state, summary, label, theme)
+                window.timeout(-1)
+                action = "exit"
                 while True:
                     keycode = window.getch()
                     if keycode == -1:
                         continue
                     key = translate(keycode)
                     if key.kind is KeyKind.RESIZE:
-                        render.draw_result_screen(window, final_state, summary, label, theme)
+                        render.draw_result_screen(window, state, summary, label, theme)
                         continue
-                    # Any key (including Ctrl-C) exits.
+                    if key.kind is KeyKind.TAB:
+                        action = "restart"
+                        break
+                    # Any other key exits.
                     break
+                window.timeout(50)
+
+                if action == "restart":
+                    continue
+                break
     except KeyboardInterrupt:
         aborted = True
     except TerminalTooSmallError:
-        # Re-raise so cli.py can print to stderr after teardown.
         raise
 
     if aborted:
         return None
-    return stats.summary(final_state)
+    return last_summary
