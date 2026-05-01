@@ -227,6 +227,12 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                 summary = stats.summary(state)
                 last_summary = summary
                 render.draw_result_screen(window, state, summary, label, theme)
+                # Drain any keypresses queued during the last second of the test
+                # so the result screen doesn't get dismissed by a stale key.
+                window.nodelay(True)
+                while window.getch() != -1:
+                    pass
+                window.nodelay(False)
                 window.timeout(-1)
                 action = "exit"
                 while True:
