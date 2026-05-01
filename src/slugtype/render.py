@@ -172,8 +172,16 @@ def format_progress(state: TestState, elapsed: float) -> str:
     return f"{submitted}/{len(state.words)}"
 
 
-def draw_result_screen(window: "curses.window", summary, config_label: str, theme: Theme, elapsed_s: float) -> None:
-    """End-of-test result screen: wpm / acc / raw with character breakdown."""
+def draw_result_screen(
+    window: "curses.window",
+    state: TestState,
+    summary,
+    config_label: str,
+    theme: Theme,
+) -> None:
+    """End-of-test result screen: wpm / acc / raw / consistency headline,
+    plus characters and time below.
+    """
     window.erase()
     rows, cols = window.getmaxyx()
 
@@ -181,52 +189,48 @@ def draw_result_screen(window: "curses.window", summary, config_label: str, them
     left = "slugtype — result"
     right = config_label
     pad = max(1, cols - len(left) - len(right) - 2)
-    text = f" {left}{' ' * pad}{right} "
-    window.addstr(0, 0, text[:cols], theme.fg_dim)
+    window.addstr(0, 0, f" {left}{' ' * pad}{right} "[:cols], theme.fg_dim)
 
-    # Headline stats: wpm / acc / raw — three centered columns
+    # Four-column headline: wpm / acc / raw / consistency
     metrics = (
         ("wpm", str(round(summary.wpm))),
         ("acc", f"{summary.accuracy:.1f}%"),
         ("raw", str(round(summary.raw_wpm))),
+        ("consistency", f"{summary.consistency:.1f}%"),
     )
-    col_width = 18
+    col_width = max(14, cols // (len(metrics) + 1))
     total_width = col_width * len(metrics)
     start_x = max(2, (cols - total_width) // 2)
     headline_y = max(4, rows // 3 - 1)
 
     for i, (label, value) in enumerate(metrics):
         col_center = start_x + i * col_width + col_width // 2
-        label_x = col_center - len(label) // 2
-        value_x = col_center - len(value) // 2
         try:
-            window.addstr(headline_y, label_x, label, theme.fg_dim)
-            window.addstr(headline_y + 2, value_x, value, theme.fg_caret)
+            window.addstr(headline_y, col_center - len(label) // 2, label, theme.fg_dim)
+            window.addstr(headline_y + 2, col_center - len(value) // 2, value, theme.fg_caret)
         except curses.error:
             pass
 
-    # Sub-stats: characters and time, two centered columns
+    # Sub-row: characters + time
     sub_y = headline_y + 6
+    elapsed = (state.ended_at - state.started_at) if state.started_at and state.ended_at else 0.0
     sub_metrics = (
         ("characters", f"{summary.correct_chars} / {summary.incorrect_chars} / {summary.extra_chars}"),
-        ("time", _format_elapsed(elapsed_s)),
+        ("time", _format_elapsed(elapsed)),
     )
-    sub_col_width = 24
+    sub_col_width = max(20, cols // (len(sub_metrics) + 1))
     sub_total_width = sub_col_width * len(sub_metrics)
     sub_start_x = max(2, (cols - sub_total_width) // 2)
-
     for i, (label, value) in enumerate(sub_metrics):
         col_center = sub_start_x + i * sub_col_width + sub_col_width // 2
-        label_x = col_center - len(label) // 2
-        value_x = col_center - len(value) // 2
         try:
-            window.addstr(sub_y, label_x, label, theme.fg_dim)
-            window.addstr(sub_y + 1, value_x, value, theme.fg_correct)
+            window.addstr(sub_y, col_center - len(label) // 2, label, theme.fg_dim)
+            window.addstr(sub_y + 1, col_center - len(value) // 2, value, theme.fg_correct)
         except curses.error:
             pass
 
     # Hint
-    hint = "press any key to exit"
+    hint = "tab restart · esc menu · any other key exits"
     hint_x = max(2, (cols - len(hint)) // 2)
     try:
         window.addstr(rows - 2, hint_x, hint, theme.fg_dim)
