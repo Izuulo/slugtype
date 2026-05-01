@@ -246,3 +246,51 @@ def _format_elapsed(elapsed_s: float) -> str:
         s = int(round(elapsed_s % 60))
         return f"{m}m{s:02d}s"
     return f"{elapsed_s:.1f}s"
+
+
+def draw_menu(
+    window: "curses.window",
+    items: list[tuple[str, str]],
+    selected_index: int,
+    theme: Theme,
+) -> None:
+    """Centered modal listing menu items as `label  value` rows.
+
+    `items` is a list of (label, current_value_string) pairs. `selected_index`
+    is the row to highlight.
+    """
+    rows, cols = window.getmaxyx()
+
+    inner_width = max(28, max((len(lbl) + len(val) for lbl, val in items), default=24) + 8)
+    box_width = min(cols - 4, inner_width + 4)
+    box_height = len(items) + 4
+    box_top = max(0, (rows - box_height) // 2)
+    box_left = max(0, (cols - box_width) // 2)
+
+    horiz = "─" * (box_width - 2)
+    try:
+        window.addstr(box_top, box_left, "┌" + horiz + "┐", theme.fg_dim)
+        for i in range(1, box_height - 1):
+            window.addstr(box_top + i, box_left, "│" + " " * (box_width - 2) + "│", theme.fg_dim)
+        window.addstr(box_top + box_height - 1, box_left, "└" + horiz + "┘", theme.fg_dim)
+    except curses.error:
+        pass
+
+    title = "settings"
+    try:
+        window.addstr(box_top + 1, box_left + (box_width - len(title)) // 2, title, theme.fg_dim)
+    except curses.error:
+        pass
+
+    for i, (label, value) in enumerate(items):
+        y = box_top + 3 + i
+        attr_label = theme.fg_caret if i == selected_index else theme.fg_correct
+        attr_value = theme.fg_caret | curses.A_REVERSE if i == selected_index else theme.fg_dim
+        try:
+            window.addstr(y, box_left + 3, label, attr_label)
+            value_x = box_left + box_width - 3 - len(value)
+            window.addstr(y, value_x, value, attr_value)
+        except curses.error:
+            pass
+
+    window.refresh()
