@@ -3,6 +3,7 @@ from dataclasses import replace
 
 from slugtype import render
 from slugtype.state import initial_state
+from slugtype.stats import Summary
 from slugtype.theme import Theme
 
 
@@ -78,3 +79,28 @@ def test_menu_renders_all_items_and_highlights_selected():
         assert label in rendered
         assert value in rendered
     assert any(attr & THEME.fg_caret for _, _, _, attr in win.calls)
+
+
+def _finished_state_for_render(samples=()):
+    s = initial_state(("the",), "time", 60.0)
+    s = replace(s, started_at=0.0, ended_at=60.0, finished=True, raw_per_second=tuple(samples))
+    return s
+
+
+def _summary_for_render(wpm=80, acc=95.0):
+    return Summary(
+        wpm=float(wpm), raw_wpm=float(wpm + 5), accuracy=acc, consistency=72.0,
+        correct_chars=400, incorrect_chars=20, extra_chars=5,
+    )
+
+
+def test_result_screen_includes_chart_when_terminal_tall_enough():
+    samples = [40 + i for i in range(60)]
+    state = _finished_state_for_render(samples=samples)
+    summary = _summary_for_render()
+    win = WindowRecorder(rows=24, cols=80)
+
+    render.draw_result_screen(win, state, summary, "60s · english-1k", THEME)
+
+    rendered = "\n".join(win.lines().values())
+    assert "┤" in rendered or "┼" in rendered

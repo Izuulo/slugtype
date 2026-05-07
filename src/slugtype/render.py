@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import curses
 
+from slugtype import sparkline
 from slugtype.state import TestState
 from slugtype.theme import Theme
 
@@ -211,8 +212,18 @@ def draw_result_screen(
         except curses.error:
             pass
 
-    # Sub-row: characters + time
-    sub_y = headline_y + 6
+    # Chart between headline and sub-stats. 6 rows total: 4 plot + axis + ticks.
+    chart_height = 6
+    chart_width = min(60, cols - 4)
+    chart_x = max(2, (cols - chart_width) // 2)
+    chart_y = headline_y + 4
+    drawn = _draw_sparkline(
+        window, state.raw_per_second, x=chart_x, y=chart_y,
+        width=chart_width, plot_height=4, theme=theme,
+    )
+
+    # Sub-row: characters + time. Y depends on whether chart was drawn.
+    sub_y = chart_y + drawn + 1 if drawn else headline_y + 6
     elapsed = (state.ended_at - state.started_at) if state.started_at and state.ended_at else 0.0
     sub_metrics = (
         ("characters", f"{summary.correct_chars} / {summary.incorrect_chars} / {summary.extra_chars}"),
@@ -246,6 +257,27 @@ def _format_elapsed(elapsed_s: float) -> str:
         s = int(round(elapsed_s % 60))
         return f"{m}m{s:02d}s"
     return f"{elapsed_s:.1f}s"
+
+
+def _draw_sparkline(window: "curses.window", samples, x: int, y: int, width: int, plot_height: int, theme: Theme) -> int:
+    """Render a sparkline at (y, x). Returns the number of rows written
+    (0 if the chart was omitted because chart_lines returned []).
+    """
+    rows_text = sparkline.chart_lines(samples, width=width, plot_height=plot_height)
+    if not rows_text:
+        return 0
+    plot_chars = set("─╭╮╯╰│┤┼")
+    for i, line in enumerate(rows_text):
+        # Color the plot characters with fg_correct, axis/labels with fg_dim.
+        col = x
+        for ch in line:
+            attr = theme.fg_correct if ch in plot_chars and ch not in "┤┼" else theme.fg_dim
+            try:
+                window.addstr(y + i, col, ch, attr)
+            except curses.error:
+                pass
+            col += 1
+    return len(rows_text)
 
 
 def draw_menu(
