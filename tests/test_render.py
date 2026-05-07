@@ -104,3 +104,23 @@ def test_result_screen_includes_chart_when_terminal_tall_enough():
 
     rendered = "\n".join(win.lines().values())
     assert "┤" in rendered or "┼" in rendered
+    # At least one plot-line glyph must be drawn in fg_correct (proves the
+    # plot body was emitted, not just the axis).
+    assert any(
+        ch in "─╭╮╯╰│"
+        for _, _, text, attr in win.calls
+        for ch in text
+        if attr == THEME.fg_correct
+    )
+
+
+def test_result_screen_shows_correct_elapsed_time():
+    state = _finished_state_for_render(samples=[50.0] * 60)
+    summary = _summary_for_render()
+    win = WindowRecorder(rows=24, cols=80)
+
+    render.draw_result_screen(win, state, summary, "60s · english-1k", THEME)
+
+    rendered = "\n".join(win.lines().values())
+    # Fixture has started_at=0.0, ended_at=60.0 → 60.0s elapsed → "1m00s"
+    assert "1m00s" in rendered

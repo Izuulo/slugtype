@@ -212,19 +212,19 @@ def draw_result_screen(
         except curses.error:
             pass
 
-    # Chart between headline and sub-stats. 6 rows total: 4 plot + axis + ticks.
+    # Chart between headline and sub-stats. Total rows = plot rows + axis row + tick row.
     chart_height = 6
     chart_width = min(60, cols - 4)
     chart_x = max(2, (cols - chart_width) // 2)
     chart_y = headline_y + 4
     drawn = _draw_sparkline(
         window, state.raw_per_second, x=chart_x, y=chart_y,
-        width=chart_width, plot_height=4, theme=theme,
+        width=chart_width, plot_height=chart_height - 2, theme=theme,
     )
 
     # Sub-row: characters + time. Y depends on whether chart was drawn.
     sub_y = chart_y + drawn + 1 if drawn else headline_y + 6
-    elapsed = (state.ended_at - state.started_at) if state.started_at and state.ended_at else 0.0
+    elapsed = (state.ended_at - state.started_at) if state.started_at is not None and state.ended_at is not None else 0.0
     sub_metrics = (
         ("characters", f"{summary.correct_chars} / {summary.incorrect_chars} / {summary.extra_chars}"),
         ("time", _format_elapsed(elapsed)),
@@ -266,12 +266,12 @@ def _draw_sparkline(window: "curses.window", samples, x: int, y: int, width: int
     rows_text = sparkline.chart_lines(samples, width=width, plot_height=plot_height)
     if not rows_text:
         return 0
-    plot_chars = set("─╭╮╯╰│┤┼")
+    plot_chars = set("─╭╮╯╰│")
     for i, line in enumerate(rows_text):
         # Color the plot characters with fg_correct, axis/labels with fg_dim.
         col = x
         for ch in line:
-            attr = theme.fg_correct if ch in plot_chars and ch not in "┤┼" else theme.fg_dim
+            attr = theme.fg_correct if ch in plot_chars else theme.fg_dim
             try:
                 window.addstr(y + i, col, ch, attr)
             except curses.error:
