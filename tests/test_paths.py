@@ -11,7 +11,7 @@ def test_data_dir_macos(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(paths.Path, "home", classmethod(lambda cls: tmp_path))
     p = paths.data_dir()
-    assert str(p).endswith("Library/Application Support/slugtype")
+    assert p == tmp_path / "Library" / "Application Support" / "slugtype"
     assert p.is_dir()
 
 
@@ -37,3 +37,16 @@ def test_history_path_lives_under_data_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     h = paths.history_path()
     assert h == tmp_path / "slugtype" / "history.jsonl"
+
+
+def test_data_dir_returns_path_when_mkdir_fails(monkeypatch, tmp_path):
+    """If the data dir cannot be created (read-only parent), data_dir()
+    must still return the path and not raise."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    tmp_path.chmod(0o400)  # read-only — mkdir will raise PermissionError
+    try:
+        p = paths.data_dir()  # must not raise
+        assert p == tmp_path / "slugtype"
+    finally:
+        tmp_path.chmod(0o700)
