@@ -1,6 +1,4 @@
 """Tests for slugtype.sparkline — pure glyph computation."""
-import pytest
-
 from slugtype.sparkline import chart_lines
 
 
@@ -38,15 +36,13 @@ def test_two_samples_known_layout():
     assert rows[3].startswith(" 15 ┤")
     assert rows[4].startswith("  0 ┼")  # axis row
 
-    # Plot area is cols 5..19 (15 cols). Sample 1 at col 5, sample 2 at col 19.
-    # Sample 1 (value=10) maps to row 3 → `─` at row 3, col 5.
-    # Sample 2 (value=50) maps to row 1 (50/60*3=2.5, rounds to 3 from bottom = row 0).
-    # Actually: row = (plot_height-1) - round(v/y_top * (plot_height-1))
-    # For v=10, plot_height=4: (3) - round(10/60*3) = 3 - 0 = 3.
-    # For v=50: 3 - round(50/60*3) = 3 - 2 = 1.
-    # So sample 1 is at row 3, sample 2 at row 1 → line goes UP.
-    assert rows[3][5] in ("─", "╰", "╯")  # first sample, possibly turned into corner
-    assert rows[1][19] in ("─", "╭", "╮")  # last sample
+    # Plot area is cols 5..19 (15 plot cols, display indices 5–19).
+    # With 2 samples and 15 plot columns, round(c * 1 / 14) flips from 0→1 around c=7.
+    # Sample 0 (value=10) → row 3; sample 1 (value=50) → row 1 → line goes UP.
+    # The going-up transition writes ╯ into the last column still at row 3, and
+    # ╭ into the first column at row 1.  Display cols: ╯ at 5+7=12, ╭ at 5+8=13.
+    assert rows[3][12] == "╯"  # retroactively turned into corner by the up-transition
+    assert rows[1][13] == "╭"  # forward-written corner at new (upper) level
 
     # Axis row is `┼─────...`
     assert rows[4][4] == "┼"
@@ -98,3 +94,15 @@ def test_all_zero_samples_renders_along_bottom():
     assert any(ch in plot_chars for ch in rows[3])
     # Top plot row should be blank in the plot area (cols 5..29).
     assert rows[0][5:].strip() == "" or all(c not in plot_chars for c in rows[0][5:])
+
+
+def test_single_column_peak_renders_closed_corner():
+    """A 1-column spike (up then immediately back down) must close the peak
+    with `╮`, not leave it as an open `╭` hook."""
+    samples = [10.0] * 4 + [10.0, 20.0, 10.0] + [10.0] * 3
+    rows = chart_lines(samples, width=15, plot_height=4)
+    rendered = "\n".join(rows)
+    # The spike must be a closed peak — `╮` must appear somewhere.
+    # `╭` may or may not also appear depending on column mapping; we only
+    # require that the peak is closed (no `╭` followed by nothing on the row).
+    assert "╮" in rendered
