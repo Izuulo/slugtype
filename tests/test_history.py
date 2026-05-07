@@ -194,3 +194,54 @@ def test_load_all_skips_record_with_non_dict_chars(tmp_path):
         f.write(json.dumps(bad) + "\n")
 
     assert history.load_all(path) == []
+
+
+def test_pb_qualifies_under_one_second_rejected():
+    state = _finished_state(duration=0.5)
+    assert history.pb_qualifies(state, _summary()) is False
+
+
+def test_pb_qualifies_under_75_percent_acc_rejected():
+    state = _finished_state(duration=60.0)
+    assert history.pb_qualifies(state, _summary(acc=74.9)) is False
+
+
+def test_pb_qualifies_at_threshold_accepted():
+    state = _finished_state(duration=1.0)
+    assert history.pb_qualifies(state, _summary(acc=75.0)) is True
+
+
+def test_pb_for_returns_max_wpm_matching_key():
+    state = _finished_state()
+    ts = datetime(2026, 5, 7, tzinfo=timezone.utc)
+    rec_a = history.record_from_state(state, _summary(wpm=70.0), _config(duration=60), ts)
+    rec_b = history.record_from_state(state, _summary(wpm=90.0), _config(duration=60), ts)
+    rec_c = history.record_from_state(state, _summary(wpm=85.0), _config(duration=30), ts)
+
+    key = history.config_key(_config(duration=60))
+    assert history.pb_for([rec_a, rec_b, rec_c], key) == rec_b
+
+
+def test_pb_for_no_match_returns_none():
+    state = _finished_state()
+    rec = history.record_from_state(
+        state, _summary(), _config(duration=60),
+        datetime(2026, 5, 7, tzinfo=timezone.utc),
+    )
+    other_key = history.config_key(_config(duration=15))
+    assert history.pb_for([rec], other_key) is None
+
+
+def test_pb_for_excludes_low_accuracy_records():
+    """Even if a low-acc run sits in history, it must not crown as PB."""
+    state = _finished_state()
+    ts = datetime(2026, 5, 7, tzinfo=timezone.utc)
+    fast_but_sloppy = history.record_from_state(state, _summary(wpm=200.0, acc=50.0), _config(), ts)
+    slower_clean = history.record_from_state(state, _summary(wpm=80.0, acc=98.0), _config(), ts)
+
+    key = history.config_key(_config())
+    assert history.pb_for([fast_but_sloppy, slower_clean], key) == slower_clean
+
+
+def test_pb_for_empty_list_returns_none():
+    assert history.pb_for([], history.config_key(_config())) is None

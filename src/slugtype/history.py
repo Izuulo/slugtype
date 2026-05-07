@@ -166,3 +166,28 @@ def load_all(path: Path) -> list[Record]:
     except OSError:
         return []
     return records
+
+
+def pb_qualifies(state: TestState, summary: "Summary") -> bool:
+    """A run qualifies for PB consideration if it ran >= 1s and accuracy >= 75%."""
+    duration = (
+        (state.ended_at - state.started_at)
+        if state.started_at is not None and state.ended_at is not None
+        else 0.0
+    )
+    if duration < 1.0:
+        return False
+    if summary.accuracy < 75.0:
+        return False
+    return True
+
+
+def pb_for(records: list[Record], key: ConfigKey) -> Optional[Record]:
+    """Return the highest-wpm record matching `key` and acc >= 75. None if no match.
+    The acc filter is defense in depth: even if a low-acc record landed in the
+    file (e.g. from an older format), it must never be crowned as PB.
+    """
+    matching = [r for r in records if config_key(r) == key and r.acc >= 75.0]
+    if not matching:
+        return None
+    return max(matching, key=lambda r: r.wpm)
