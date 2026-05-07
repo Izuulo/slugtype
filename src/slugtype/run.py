@@ -273,7 +273,7 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                         continue
                     key = translate(keycode)
                     if key.kind is KeyKind.RESIZE:
-                        render.draw_result_screen(window, state, summary, label, theme)
+                        render.draw_result_screen(window, state, summary, label, theme, was_pb=was_pb)
                         continue
                     if key.kind is KeyKind.TAB:
                         action = "restart"
