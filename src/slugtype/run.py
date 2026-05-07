@@ -4,9 +4,10 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional
 
-from slugtype import render, stats, words
+from slugtype import history, paths, render, stats, words
 from slugtype.input import KeyKind, translate
 from slugtype.state import TestState, apply_keypress, append_sample, initial_state, tick
 from slugtype.terminal import TerminalTooSmallError, session
@@ -156,6 +157,32 @@ def _open_menu(window, theme, current_config: Config) -> Optional[Config]:
         window.timeout(50)
 
 
+def _finalize(
+    state: TestState,
+    summary: stats.Summary,
+    config: Config,
+    now_utc: datetime,
+    history_file,
+) -> bool:
+    """Persist the finished test (if it qualifies) and decide whether it's
+    a personal best for its config. Returns ``was_pb``.
+
+    ``history_file`` is a Path; injected so tests can substitute a tmp path.
+    """
+    if not history.pb_qualifies(state, summary):
+        return False
+
+    record = history.record_from_state(state, summary, config, now_utc)
+    # Read existing records *before* appending so the new run isn't its own baseline.
+    prior = history.load_all(history_file)
+    key = history.config_key(record)
+    prev_pb = history.pb_for(prior, key)
+    was_pb = prev_pb is None or record.wpm > prev_pb.wpm
+
+    history.append(record, history_file)
+    return was_pb
+
+
 def run_test(config: Config) -> Optional[stats.Summary]:
     """Run tests in a loop, supporting tab restart. Returns the last summary
     on natural exit, or None if the user aborted (Ctrl-C).
@@ -223,10 +250,15 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                 if restart_requested:
                     continue  # outer while: build a fresh state and run again
 
-                # Test finished naturally — show result screen.
+                # Test finished naturally — persist, decide PB, show result screen.
                 summary = stats.summary(state)
                 last_summary = summary
-                render.draw_result_screen(window, state, summary, label, theme)
+                was_pb = _finalize(
+                    state, summary, config,
+                    datetime.now(timezone.utc),
+                    paths.history_path(),
+                )
+                render.draw_result_screen(window, state, summary, label, theme, was_pb=was_pb)
                 # Drain any keypresses queued during the last second of the test
                 # so the result screen doesn't get dismissed by a stale key.
                 window.nodelay(True)
