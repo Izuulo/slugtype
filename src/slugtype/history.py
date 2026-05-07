@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -43,7 +43,7 @@ def record_from_state(state: TestState, summary, config, ts: datetime) -> Record
         else 0.0
     )
     return Record(
-        ts=ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        ts=ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         wpm=summary.wpm,
         raw=summary.raw_wpm,
         acc=summary.accuracy,

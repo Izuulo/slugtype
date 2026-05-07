@@ -1,8 +1,5 @@
 """Tests for slugtype.history — JSONL persistence and PB queries."""
-from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-
-import pytest
 
 from slugtype import history
 from slugtype.run import Config
@@ -73,3 +70,4 @@ def test_record_length_uses_word_count_for_words_mode():
 
     assert rec.mode == "words"
     assert rec.length == 25
+    assert rec.duration_s == 12.0
