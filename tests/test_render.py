@@ -146,3 +146,16 @@ def test_result_screen_without_pb_omits_badge():
 
     rendered = "\n".join(win.lines().values())
     assert "pb" not in rendered
+
+
+def test_result_screen_small_terminal_omits_chart():
+    state = _finished_state_for_render(samples=[50.0] * 60)
+    summary = _summary_for_render()
+    win = WindowRecorder(rows=16, cols=80)
+
+    render.draw_result_screen(win, state, summary, "60s · english-1k", THEME)
+
+    rendered = "\n".join(win.lines().values())
+    # No chart glyphs at all when rows < 17.
+    for ch in "┤┼╭╮╯╰":
+        assert ch not in rendered

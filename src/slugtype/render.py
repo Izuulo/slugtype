@@ -216,15 +216,19 @@ def draw_result_screen(
         except curses.error:
             pass
 
-    # Chart between headline and sub-stats. Total rows = plot rows + axis row + tick row.
+    # Chart between headline and sub-stats — total rows = plot rows + axis + ticks.
+    # Skip when terminal is too short to fit the full layout
+    # (top bar + headline + chart + sub-row + hint).
     chart_height = 6
-    chart_width = min(60, cols - 4)
-    chart_x = max(2, (cols - chart_width) // 2)
     chart_y = headline_y + 4
-    drawn = _draw_sparkline(
-        window, state.raw_per_second, x=chart_x, y=chart_y,
-        width=chart_width, plot_height=chart_height - 2, theme=theme,
-    )
+    drawn = 0
+    if rows >= 17:
+        chart_width = min(60, cols - 4)
+        chart_x = max(2, (cols - chart_width) // 2)
+        drawn = _draw_sparkline(
+            window, state.raw_per_second, x=chart_x, y=chart_y,
+            width=chart_width, plot_height=chart_height - 2, theme=theme,
+        )
 
     # Sub-row: characters + time. Y depends on whether chart was drawn.
     sub_y = chart_y + drawn + 1 if drawn else headline_y + 6
