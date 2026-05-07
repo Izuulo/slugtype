@@ -1,5 +1,8 @@
 """Tests for slugtype.history — JSONL persistence and PB queries."""
+import os
 from datetime import datetime, timezone
+
+import pytest
 
 from slugtype import history
 from slugtype.run import Config
@@ -94,9 +97,7 @@ def test_append_then_load_roundtrip(tmp_path):
     loaded = history.load_all(path)
 
     assert len(loaded) == 1
-    assert loaded[0].wpm == rec.wpm
-    assert loaded[0].language == rec.language
-    assert loaded[0].samples == (40.0, 50.0)
+    assert loaded[0] == rec
 
 
 def test_append_appends_not_overwrites(tmp_path):
@@ -118,6 +119,10 @@ def test_append_appends_not_overwrites(tmp_path):
     assert {r.wpm for r in loaded} == {70.0, 85.0}
 
 
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="chmod-based unwritable test is unreliable when running as root",
+)
 def test_append_swallows_oserror(tmp_path):
     """Pointing append at an unwritable path must not raise."""
     bad_path = tmp_path / "nope" / "deeper" / "history.jsonl"
@@ -172,3 +177,20 @@ def test_load_all_defaults_missing_optional_fields(tmp_path):
     assert loaded[0].punctuation is False
     assert loaded[0].numbers is False
     assert loaded[0].samples == ()
+
+
+def test_load_all_skips_record_with_non_dict_chars(tmp_path):
+    """A record where 'chars' is not a dict must be skipped, not stored
+    with malformed content that would crash later consumers."""
+    path = tmp_path / "history.jsonl"
+    bad = {
+        "ts": "2026-05-07T00:00:00Z",
+        "wpm": 80.0, "acc": 95.0,
+        "mode": "time", "length": 60, "language": "english-1k",
+        "chars": "not a dict",
+    }
+    import json
+    with open(path, "w") as f:
+        f.write(json.dumps(bad) + "\n")
+
+    assert history.load_all(path) == []

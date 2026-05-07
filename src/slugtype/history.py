@@ -5,7 +5,11 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from slugtype.run import Config
+    from slugtype.stats import Summary
 
 from slugtype.state import TestState
 
@@ -29,13 +33,13 @@ class Record:
     samples: tuple = ()              # per-second raw WPM
 
 
-def _config_length(config) -> int:
+def _config_length(config: "Config") -> int:
     if config.mode == "time":
         return int(config.duration_s)
     return int(config.word_count)
 
 
-def record_from_state(state: TestState, summary, config, ts: datetime) -> Record:
+def record_from_state(state: TestState, summary: "Summary", config: "Config", ts: datetime) -> Record:
     """Build a Record from a finished TestState + Summary + Config + timestamp."""
     duration = (
         (state.ended_at - state.started_at)
@@ -64,7 +68,7 @@ def record_from_state(state: TestState, summary, config, ts: datetime) -> Record
     )
 
 
-def config_key(record_or_config) -> ConfigKey:
+def config_key(record_or_config: Union[Record, "Config"]) -> ConfigKey:
     """Build the PB key tuple from a Record or Config. Tuple shape:
     (mode, length, language, punctuation, numbers).
     """
@@ -103,6 +107,9 @@ def _record_from_json(d: dict) -> Optional[Record]:
     """Build a Record from a JSON dict; return None if required fields are
     missing or malformed. Optional fields default to safe values.
     """
+    chars_raw = d.get("chars", {"correct": 0, "incorrect": 0, "extra": 0, "missed": 0})
+    if not isinstance(chars_raw, dict):
+        return None
     try:
         return Record(
             ts=str(d["ts"]),
@@ -115,7 +122,7 @@ def _record_from_json(d: dict) -> Optional[Record]:
             language=str(d["language"]),
             punctuation=bool(d.get("punctuation", False)),
             numbers=bool(d.get("numbers", False)),
-            chars=d.get("chars", {"correct": 0, "incorrect": 0, "extra": 0, "missed": 0}),
+            chars=chars_raw,
             duration_s=float(d.get("duration_s", 0.0)),
             samples=tuple(d.get("samples", ())),
         )
