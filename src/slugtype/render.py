@@ -179,6 +179,7 @@ def draw_result_screen(
     summary,
     config_label: str,
     theme: Theme,
+    was_pb: bool = False,
 ) -> None:
     """End-of-test result screen: wpm / acc / raw / consistency headline,
     plus characters and time below.
@@ -193,8 +194,11 @@ def draw_result_screen(
     window.addstr(0, 0, f" {left}{' ' * pad}{right} "[:cols], theme.fg_dim)
 
     # Four-column headline: wpm / acc / raw / consistency
+    wpm_value = str(round(summary.wpm))
+    if was_pb:
+        wpm_value = f"{wpm_value} pb"
     metrics = (
-        ("wpm", str(round(summary.wpm))),
+        ("wpm", wpm_value),
         ("acc", f"{summary.accuracy:.1f}%"),
         ("raw", str(round(summary.raw_wpm))),
         ("consistency", f"{summary.consistency:.1f}%"),

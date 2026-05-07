@@ -124,3 +124,25 @@ def test_result_screen_shows_correct_elapsed_time():
     rendered = "\n".join(win.lines().values())
     # Fixture has started_at=0.0, ended_at=60.0 → 60.0s elapsed → "1m00s"
     assert "1m00s" in rendered
+
+
+def test_result_screen_with_pb_shows_badge():
+    state = _finished_state_for_render(samples=[50.0] * 60)
+    summary = _summary_for_render(wpm=87)
+    win = WindowRecorder(rows=24, cols=80)
+
+    render.draw_result_screen(win, state, summary, "60s · english-1k", THEME, was_pb=True)
+
+    rendered = "\n".join(win.lines().values())
+    assert " pb" in rendered or "pb" in rendered.split("87", 1)[1][:20]
+
+
+def test_result_screen_without_pb_omits_badge():
+    state = _finished_state_for_render(samples=[50.0] * 60)
+    summary = _summary_for_render(wpm=87)
+    win = WindowRecorder(rows=24, cols=80)
+
+    render.draw_result_screen(win, state, summary, "60s · english-1k", THEME, was_pb=False)
+
+    rendered = "\n".join(win.lines().values())
+    assert "pb" not in rendered
