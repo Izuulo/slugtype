@@ -71,3 +71,104 @@ def test_record_length_uses_word_count_for_words_mode():
     assert rec.mode == "words"
     assert rec.length == 25
     assert rec.duration_s == 12.0
+
+
+def test_config_key_from_record():
+    state = _finished_state()
+    config = _config(mode="time", duration=30, lang="english-200")
+    rec = history.record_from_state(state, _summary(), config, datetime(2026, 5, 7, tzinfo=timezone.utc))
+    assert history.config_key(rec) == ("time", 30, "english-200", False, False)
+
+
+def test_config_key_from_config():
+    config = _config(mode="words", duration=0, words=50, lang="english-1k")
+    assert history.config_key(config) == ("words", 50, "english-1k", False, False)
+
+
+def test_append_then_load_roundtrip(tmp_path):
+    path = tmp_path / "history.jsonl"
+    state = _finished_state(samples=(40.0, 50.0))
+    rec = history.record_from_state(state, _summary(), _config(), datetime(2026, 5, 7, tzinfo=timezone.utc))
+
+    history.append(rec, path)
+    loaded = history.load_all(path)
+
+    assert len(loaded) == 1
+    assert loaded[0].wpm == rec.wpm
+    assert loaded[0].language == rec.language
+    assert loaded[0].samples == (40.0, 50.0)
+
+
+def test_append_appends_not_overwrites(tmp_path):
+    path = tmp_path / "history.jsonl"
+    rec1 = history.record_from_state(
+        _finished_state(), _summary(wpm=70.0), _config(),
+        datetime(2026, 5, 7, tzinfo=timezone.utc),
+    )
+    rec2 = history.record_from_state(
+        _finished_state(), _summary(wpm=85.0), _config(),
+        datetime(2026, 5, 8, tzinfo=timezone.utc),
+    )
+
+    history.append(rec1, path)
+    history.append(rec2, path)
+    loaded = history.load_all(path)
+
+    assert len(loaded) == 2
+    assert {r.wpm for r in loaded} == {70.0, 85.0}
+
+
+def test_append_swallows_oserror(tmp_path):
+    """Pointing append at an unwritable path must not raise."""
+    bad_path = tmp_path / "nope" / "deeper" / "history.jsonl"
+    bad_path.parent.mkdir(parents=True)
+    bad_path.parent.chmod(0o400)  # read-only
+    try:
+        rec = history.record_from_state(
+            _finished_state(), _summary(), _config(),
+            datetime(2026, 5, 7, tzinfo=timezone.utc),
+        )
+        history.append(rec, bad_path)  # must not raise
+    finally:
+        bad_path.parent.chmod(0o700)
+
+
+def test_load_all_missing_file(tmp_path):
+    assert history.load_all(tmp_path / "nope.jsonl") == []
+
+
+def test_load_all_skips_malformed_lines(tmp_path):
+    path = tmp_path / "history.jsonl"
+    rec = history.record_from_state(
+        _finished_state(), _summary(), _config(),
+        datetime(2026, 5, 7, tzinfo=timezone.utc),
+    )
+    history.append(rec, path)
+    # Append a garbage line.
+    with open(path, "a") as f:
+        f.write("this is not json\n")
+        f.write("\n")
+        f.write('{"this": "lacks required fields"}\n')
+
+    loaded = history.load_all(path)
+    assert len(loaded) == 1
+    assert loaded[0].wpm == rec.wpm
+
+
+def test_load_all_defaults_missing_optional_fields(tmp_path):
+    """Records without punctuation/numbers/samples get safe defaults."""
+    path = tmp_path / "history.jsonl"
+    minimal = {
+        "ts": "2026-05-07T00:00:00Z",
+        "wpm": 80.0, "acc": 95.0,
+        "mode": "time", "length": 60, "language": "english-1k",
+    }
+    import json
+    with open(path, "w") as f:
+        f.write(json.dumps(minimal) + "\n")
+
+    loaded = history.load_all(path)
+    assert len(loaded) == 1
+    assert loaded[0].punctuation is False
+    assert loaded[0].numbers is False
+    assert loaded[0].samples == ()
