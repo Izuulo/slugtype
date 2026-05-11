@@ -101,6 +101,17 @@ def _apply_space(state: TestState, now: float) -> TestState:
     return replace(state, words=new_words, current_index=state.current_index + 1)
 
 
+def _word_was_perfect(word: WordEntry) -> bool:
+    """A word is 'perfect' if its typed buffer is exactly the expected length
+    and every typed char is marked correct. Used to gate backspace crossing
+    into a previous word — fully-correct words stay locked, imperfect words
+    are still editable.
+    """
+    if len(word.typed) != len(word.expected):
+        return False
+    return all(tc.category == "correct" for tc in word.typed)
+
+
 def _apply_backspace(state: TestState) -> TestState:
     current = state.words[state.current_index]
     if len(current.typed) == 0:

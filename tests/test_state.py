@@ -8,6 +8,7 @@ from slugtype.state import (
     WordEntry,
     initial_state,
     apply_keypress,
+    _word_was_perfect,
 )
 
 
@@ -208,3 +209,57 @@ def test_append_sample_returns_new_state_with_sample_appended():
     # Original states are unmodified.
     assert s.raw_per_second == ()
     assert s2.raw_per_second == (42.0,)
+
+
+def test_word_was_perfect_all_correct():
+    word = WordEntry(
+        expected="the",
+        typed=(
+            TypedChar("t", "t", "correct"),
+            TypedChar("h", "h", "correct"),
+            TypedChar("e", "e", "correct"),
+        ),
+        submitted=True,
+    )
+    assert _word_was_perfect(word) is True
+
+
+def test_word_was_perfect_has_incorrect():
+    word = WordEntry(
+        expected="the",
+        typed=(
+            TypedChar("t", "t", "correct"),
+            TypedChar("h", "x", "incorrect"),
+            TypedChar("e", "e", "correct"),
+        ),
+        submitted=True,
+    )
+    assert _word_was_perfect(word) is False
+
+
+def test_word_was_perfect_has_extra():
+    word = WordEntry(
+        expected="the",
+        typed=(
+            TypedChar("t", "t", "correct"),
+            TypedChar("h", "h", "correct"),
+            TypedChar("e", "e", "correct"),
+            TypedChar("", "x", "extra"),
+        ),
+        submitted=True,
+    )
+    assert _word_was_perfect(word) is False
+
+
+def test_word_was_perfect_missed_chars():
+    word = WordEntry(
+        expected="the",
+        typed=(TypedChar("t", "t", "correct"),),
+        submitted=True,
+    )
+    assert _word_was_perfect(word) is False
+
+
+def test_word_was_perfect_empty_typed():
+    word = WordEntry(expected="the", typed=(), submitted=True)
+    assert _word_was_perfect(word) is False
