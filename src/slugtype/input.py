@@ -18,6 +18,7 @@ class KeyKind(Enum):
     LEFT = auto()
     RIGHT = auto()
     CTRL_C = auto()
+    CTRL_R = auto()
     RESIZE = auto()
     UNKNOWN = auto()
 
@@ -33,6 +34,8 @@ def translate(keycode: int) -> Key:
         return Key(kind=KeyKind.UNKNOWN)
     if keycode == 3:
         return Key(kind=KeyKind.CTRL_C)
+    if keycode == 18:
+        return Key(kind=KeyKind.CTRL_R)
     if keycode == 9:
         return Key(kind=KeyKind.TAB)
     if keycode == 27:

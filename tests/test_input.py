@@ -31,6 +31,11 @@ def test_translate_ctrl_c_returns_ctrl_c():
     assert translate(3).kind is KeyKind.CTRL_C
 
 
+def test_translate_ctrl_r_returns_ctrl_r():
+    """Ctrl-R is keycode 18 in ASCII control range."""
+    assert translate(18).kind is KeyKind.CTRL_R
+
+
 def test_translate_resize_returns_resize():
     assert translate(curses.KEY_RESIZE).kind is KeyKind.RESIZE
 
