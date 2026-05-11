@@ -3,7 +3,8 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from slugtype import history
-from slugtype.run import Config, _finalize
+from slugtype.input import Key, KeyKind
+from slugtype.run import Config, _finalize, _result_screen_dispatch
 from slugtype.state import TestState, TypedChar, WordEntry, initial_state
 from slugtype.stats import Summary
 
@@ -99,3 +100,45 @@ def test_finalize_pb_per_config_key(tmp_path):
     # 30s run at 70 wpm — should be PB for the 30s key (no prior 30s run)
     was_pb_30 = _finalize(_state(), _summary(wpm=70.0), _config(duration=30), _now(), path)
     assert was_pb_30 is True
+
+
+def test_result_dispatch_tab_restarts():
+    assert _result_screen_dispatch(Key(kind=KeyKind.TAB)) == "restart"
+
+
+def test_result_dispatch_ctrl_r_restarts():
+    assert _result_screen_dispatch(Key(kind=KeyKind.CTRL_R)) == "restart"
+
+
+def test_result_dispatch_esc_opens_menu():
+    assert _result_screen_dispatch(Key(kind=KeyKind.ESC)) == "menu"
+
+
+def test_result_dispatch_n_opens_menu():
+    assert _result_screen_dispatch(Key(kind=KeyKind.CHAR, char="n")) == "menu"
+
+
+def test_result_dispatch_q_exits():
+    assert _result_screen_dispatch(Key(kind=KeyKind.CHAR, char="q")) == "exit"
+
+
+def test_result_dispatch_ctrl_c_aborts():
+    assert _result_screen_dispatch(Key(kind=KeyKind.CTRL_C)) == "abort"
+
+
+def test_result_dispatch_resize_redraws():
+    assert _result_screen_dispatch(Key(kind=KeyKind.RESIZE)) == "redraw"
+
+
+def test_result_dispatch_random_char_ignored():
+    assert _result_screen_dispatch(Key(kind=KeyKind.CHAR, char="a")) == "ignore"
+    assert _result_screen_dispatch(Key(kind=KeyKind.CHAR, char="x")) == "ignore"
+    assert _result_screen_dispatch(Key(kind=KeyKind.CHAR, char="1")) == "ignore"
+
+
+def test_result_dispatch_space_ignored():
+    assert _result_screen_dispatch(Key(kind=KeyKind.SPACE)) == "ignore"
+
+
+def test_result_dispatch_backspace_ignored():
+    assert _result_screen_dispatch(Key(kind=KeyKind.BACKSPACE)) == "ignore"

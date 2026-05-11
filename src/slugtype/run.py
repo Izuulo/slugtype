@@ -183,6 +183,34 @@ def _finalize(
     return was_pb
 
 
+def _result_screen_dispatch(key) -> str:
+    """Map a translated Key to one of:
+    - "restart" — restart the test with the same config
+    - "menu" — open the settings menu
+    - "exit" — quit cleanly with the just-finished summary
+    - "abort" — quit as aborted (returns None from run_test)
+    - "redraw" — terminal resized, repaint the result screen
+    - "ignore" — no action, keep waiting for the next key
+
+    Only explicit keys (tab/ctrl-r/esc/n/q/ctrl-c) trigger transitions.
+    Everything else is ignored so a fast typist's next keystroke can't
+    accidentally dismiss the result screen.
+    """
+    if key.kind is KeyKind.RESIZE:
+        return "redraw"
+    if key.kind in (KeyKind.TAB, KeyKind.CTRL_R):
+        return "restart"
+    if key.kind is KeyKind.ESC:
+        return "menu"
+    if key.kind is KeyKind.CHAR and key.char == "n":
+        return "menu"
+    if key.kind is KeyKind.CHAR and key.char == "q":
+        return "exit"
+    if key.kind is KeyKind.CTRL_C:
+        return "abort"
+    return "ignore"
+
+
 def run_test(config: Config) -> Optional[stats.Summary]:
     """Run tests in a loop, supporting tab restart. Returns the last summary
     on natural exit, or None if the user aborted (Ctrl-C).
@@ -214,7 +242,7 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                         if key.kind is KeyKind.CTRL_C:
                             aborted = True
                             break
-                        if key.kind is KeyKind.TAB:
+                        if key.kind in (KeyKind.TAB, KeyKind.CTRL_R):
                             restart_requested = True
                             break
                         if key.kind is KeyKind.ESC:
@@ -272,20 +300,27 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                     if keycode == -1:
                         continue
                     key = translate(keycode)
-                    if key.kind is KeyKind.RESIZE:
+                    decision = _result_screen_dispatch(key)
+                    if decision == "redraw":
                         render.draw_result_screen(window, state, summary, label, theme, was_pb=was_pb)
                         continue
-                    if key.kind is KeyKind.TAB:
+                    if decision == "restart":
                         action = "restart"
                         break
-                    if key.kind is KeyKind.ESC:
+                    if decision == "menu":
                         new_config = _open_menu(window, theme, config)
                         if new_config is not None:
                             config = new_config
                         action = "restart"
                         break
-                    # Any other key exits.
-                    break
+                    if decision == "exit":
+                        action = "exit"
+                        break
+                    if decision == "abort":
+                        aborted = True
+                        action = "exit"
+                        break
+                    # "ignore" — loop back to blocking getch
                 window.timeout(50)
 
                 if action == "restart":
