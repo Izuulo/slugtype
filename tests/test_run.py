@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from slugtype import history
 from slugtype.input import Key, KeyKind
-from slugtype.run import Config, _finalize, _result_screen_dispatch
+from slugtype.run import Config, _finalize, _result_screen_dispatch, _menu_cancel_should_restart
 from slugtype.state import TestState, TypedChar, WordEntry, initial_state
 from slugtype.stats import Summary
 
@@ -142,3 +142,29 @@ def test_result_dispatch_space_ignored():
 
 def test_result_dispatch_backspace_ignored():
     assert _result_screen_dispatch(Key(kind=KeyKind.BACKSPACE)) == "ignore"
+
+
+def test_menu_cancel_none_does_not_restart():
+    """Esc-cancel from the menu returns None → resume the run."""
+    cfg = Config(mode="time", duration_s=60.0, word_count=0, language="english-1k")
+    assert _menu_cancel_should_restart(cfg, None) is False
+
+
+def test_menu_identical_config_does_not_restart():
+    """Entering the menu and pressing Enter without changing anything → resume."""
+    cfg = Config(mode="time", duration_s=60.0, word_count=0, language="english-1k")
+    same = Config(mode="time", duration_s=60.0, word_count=0, language="english-1k")
+    assert _menu_cancel_should_restart(cfg, same) is False
+
+
+def test_menu_changed_config_restarts():
+    """Real config change → restart with new config."""
+    cfg = Config(mode="time", duration_s=60.0, word_count=0, language="english-1k")
+    new = Config(mode="time", duration_s=30.0, word_count=0, language="english-1k")
+    assert _menu_cancel_should_restart(cfg, new) is True
+
+
+def test_menu_language_change_restarts():
+    cfg = Config(mode="time", duration_s=60.0, word_count=0, language="english-1k")
+    new = Config(mode="time", duration_s=60.0, word_count=0, language="english-200")
+    assert _menu_cancel_should_restart(cfg, new) is True

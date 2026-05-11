@@ -183,6 +183,19 @@ def _finalize(
     return was_pb
 
 
+def _menu_cancel_should_restart(old_config: Config, new_config: Optional[Config]) -> bool:
+    """Decide whether closing the menu should restart the test.
+
+    Resume the in-progress run when:
+    - The user cancelled the menu (new_config is None), OR
+    - The user pressed Enter without changing anything (new_config == old_config).
+
+    Restart only when a real config change happened. `Config` is a frozen
+    dataclass so equality is structural.
+    """
+    return new_config is not None and new_config != old_config
+
+
 def _result_screen_dispatch(key) -> str:
     """Map a translated Key to one of:
     - "restart" — restart the test with the same config
@@ -247,10 +260,16 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                             break
                         if key.kind is KeyKind.ESC:
                             new_config = _open_menu(window, theme, config)
-                            if new_config is not None:
+                            if _menu_cancel_should_restart(config, new_config):
                                 config = new_config
-                            restart_requested = True
-                            break
+                                restart_requested = True
+                                break
+                            # Cancelled or identical: resume the run.
+                            render.draw(
+                                window, state, theme, label, now,
+                                _live_wpm_for_config(state, now, config),
+                            )
+                            continue
                         if key.kind is KeyKind.RESIZE:
                             render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
                             continue
@@ -309,10 +328,13 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                         break
                     if decision == "menu":
                         new_config = _open_menu(window, theme, config)
-                        if new_config is not None:
+                        if _menu_cancel_should_restart(config, new_config):
                             config = new_config
-                        action = "restart"
-                        break
+                            action = "restart"
+                            break
+                        # Cancelled or identical: redraw and keep waiting.
+                        render.draw_result_screen(window, state, summary, label, theme, was_pb=was_pb)
+                        continue
                     if decision == "exit":
                         action = "exit"
                         break
