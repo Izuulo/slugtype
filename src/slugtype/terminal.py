@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import curses
+import os
 import sys
 from contextlib import contextmanager
 from typing import Iterator
@@ -15,6 +16,16 @@ class TerminalTooSmallError(RuntimeError):
     pass
 
 
+def _configure_escape_delay() -> None:
+    """Make Esc responsive. Default ESCDELAY is 1000ms with many curses builds,
+    which makes single Esc presses lag and causes arrow-key escape sequences
+    to deliver bare ESC when the buffer drains too quickly. 25ms is enough for
+    ncurses to coalesce arrow-key sequences without blocking real Esc presses.
+    Must be called before curses.initscr() — ncurses reads ESCDELAY at init.
+    """
+    os.environ.setdefault("ESCDELAY", "25")
+
+
 @contextmanager
 def session() -> Iterator["curses.window"]:
     """Enter alt-screen + raw mode for the duration of the block.
@@ -22,6 +33,7 @@ def session() -> Iterator["curses.window"]:
     Raises TerminalTooSmallError if the terminal is below MIN_COLS x MIN_ROWS
     when entering. On exit (normal or exceptional) restores the terminal.
     """
+    _configure_escape_delay()
     stdscr = curses.initscr()
     try:
         curses.noecho()
