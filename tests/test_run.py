@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from slugtype import history
 from slugtype.input import Key, KeyKind
-from slugtype.run import Config, _finalize, _result_screen_dispatch, _menu_cancel_should_restart
+from slugtype.run import Config, _finalize, _result_screen_dispatch, _menu_cancel_should_restart, _safe_finalize
 from slugtype.state import TestState, TypedChar, WordEntry, initial_state
 from slugtype.stats import Summary
 
@@ -168,3 +168,24 @@ def test_menu_language_change_restarts():
     cfg = Config(mode="time", duration_s=60.0, word_count=0, language="english-1k")
     new = Config(mode="time", duration_s=60.0, word_count=0, language="english-200")
     assert _menu_cancel_should_restart(cfg, new) is True
+
+
+def test_safe_finalize_returns_false_on_history_error(monkeypatch, tmp_path):
+    """If history.append raises (disk full, permission), the result screen
+    must still render — so _safe_finalize swallows the error and returns False.
+    """
+    def boom(*args, **kwargs):
+        raise RuntimeError("disk full")
+    monkeypatch.setattr(history, "append", boom)
+
+    path = tmp_path / "history.jsonl"
+    result = _safe_finalize(_state(), _summary(), _config(), _now(), path)
+    assert result is False
+
+
+def test_safe_finalize_returns_true_on_normal_pb(tmp_path):
+    """Sanity: when nothing goes wrong, _safe_finalize behaves like _finalize."""
+    path = tmp_path / "history.jsonl"
+    result = _safe_finalize(_state(), _summary(wpm=85.0), _config(), _now(), path)
+    assert result is True
+    assert path.exists()

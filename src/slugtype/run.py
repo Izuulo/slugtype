@@ -183,6 +183,23 @@ def _finalize(
     return was_pb
 
 
+def _safe_finalize(
+    state: TestState,
+    summary: stats.Summary,
+    config: Config,
+    now_utc: datetime,
+    history_file,
+) -> bool:
+    """Wrap _finalize so persistence failures (disk full, permission, partial
+    write) never prevent the result screen from rendering. Returns False on
+    any exception — the user still sees their stats; only the PB badge is lost.
+    """
+    try:
+        return _finalize(state, summary, config, now_utc, history_file)
+    except Exception:
+        return False
+
+
 def _menu_cancel_should_restart(old_config: Config, new_config: Optional[Config]) -> bool:
     """Decide whether closing the menu should restart the test.
 
@@ -300,7 +317,7 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                 # Test finished naturally — persist, decide PB, show result screen.
                 summary = stats.summary(state)
                 last_summary = summary
-                was_pb = _finalize(
+                was_pb = _safe_finalize(
                     state, summary, config,
                     datetime.now(timezone.utc),
                     paths.history_path(),
