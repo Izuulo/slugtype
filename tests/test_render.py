@@ -159,3 +159,89 @@ def test_result_screen_small_terminal_omits_chart():
     # No chart glyphs at all when rows < 17.
     for ch in "┤┼╭╮╯╰":
         assert ch not in rendered
+
+
+def test_word_stream_does_not_split_word_mid_character():
+    """When a word would overflow the right edge, the WHOLE word wraps to the
+    next line — characters are never broken across lines.
+    """
+    # cols=24, inner_cols=20. Five 4-letter words: "abcd efgh ijkl mnop qrst".
+    # "abcd efgh ijkl mnop" = 19 chars, room for 1 more char before inner_cols=20.
+    # "qrst " = 5 chars: would push line to 24 — wraps to next line as a whole.
+    s = initial_state(("abcd", "efgh", "ijkl", "mnop", "qrst"), "time", 60.0)
+    win = WindowRecorder(rows=24, cols=24)
+    render.draw_word_stream(win, s, THEME)
+    rendered = win.lines()
+    # Row 2 is the first wrapped line; row 3 is the second.
+    assert "qrst" in rendered.get(3, "")
+    assert "qrst" not in rendered.get(2, "")
+    # Confirm the previous word is intact on row 2 (no orphaned chars on row 3).
+    assert "mnop" in rendered.get(2, "")
+
+
+def test_word_stream_does_not_split_partially_typed_word_at_edge():
+    """The actual bug case: a partially-typed current word at the right edge.
+
+    With OLD per-segment wrap, this would split mid-character because each
+    typed char of the current word is its own segment. Concretely:
+
+    cols=28, inner_cols=24.
+    Prior submitted words: "abcd " "efgh " "ijkl " "mnop " = 20 chars.
+    Current word "qrstuv" with "q" typed produces segments:
+      ("q", correct)=1, ("r", caret)=1, ("stuv", dim)=4, (" ", dim)=1 → 7 chars total.
+    Block wrap: 20+7=27 > 24, so whole block wraps to line 1 — "qrstuv" intact on row 3.
+    Old segment wrap: after col 20, "q" fits (21≤24), "r" fits (22≤24),
+      "stuv" at 22+4=26 > 24 → wraps, splitting "qrstuv" across two lines.
+    """
+    from slugtype.state import TypedChar, WordEntry
+
+    s = initial_state(("abcd", "efgh", "ijkl", "mnop", "qrstuv"), "time", 60.0)
+    submitted_words = tuple(
+        WordEntry(w, tuple(TypedChar(c, c, "correct") for c in w), submitted=True)
+        for w in ("abcd", "efgh", "ijkl", "mnop")
+    )
+    # "qrstuv" with "q" typed — each typed char is its own segment under _build_word_blocks.
+    current_word = WordEntry(
+        "qrstuv",
+        typed=(TypedChar("q", "q", "correct"),),
+        submitted=False,
+    )
+    s = replace(
+        s,
+        words=submitted_words + (current_word,),
+        current_index=4,
+        started_at=0.0,
+    )
+    win = WindowRecorder(rows=24, cols=28)  # inner_cols=24
+    render.draw_word_stream(win, s, THEME)
+    rendered = win.lines()
+
+    # "qrstuv" must appear intact on exactly one row.
+    rows_with_full_word = [y for y, line in rendered.items() if "qrstuv" in line]
+    # Any two-char substring of "qrstuv" on a row that lacks the full word is a split fragment.
+    substrings = ("qr", "rs", "st", "tu", "uv")
+    rows_with_fragment = [
+        y for y, line in rendered.items()
+        if any(sub in line for sub in substrings) and "qrstuv" not in line
+    ]
+    assert len(rows_with_full_word) == 1, (
+        f"Expected 'qrstuv' intact on exactly one row; got rows {rows_with_full_word}, "
+        f"fragments on {rows_with_fragment}, rendered: {rendered}"
+    )
+    assert not rows_with_fragment, (
+        f"Found word fragments on row(s) {rows_with_fragment}; rendered: {rendered}"
+    )
+    # Belt-and-suspenders: the prior word "mnop" is on row 2, current word on row 3.
+    assert "mnop" in rendered.get(2, ""), f"Expected 'mnop' on row 2; rendered: {rendered}"
+    assert "qrstuv" in rendered.get(3, ""), f"Expected 'qrstuv' on row 3; rendered: {rendered}"
+
+
+def test_word_stream_long_block_falls_back_to_per_segment_wrap():
+    """A single block longer than inner_cols (200-char extras-spam) should not
+    crash — it falls back to per-segment wrapping and writes what it can.
+    """
+    s = initial_state(("x" * 200,), "time", 60.0)
+    win = WindowRecorder(rows=24, cols=80)
+    render.draw_word_stream(win, s, THEME)
+    # Should produce calls without raising; exact layout is not asserted.
+    assert len(win.calls) > 0

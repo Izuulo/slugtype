@@ -36,11 +36,10 @@ def draw_word_stream(window: "curses.window", state: TestState, theme: Theme) ->
     if inner_cols < 10:
         return
 
-    segments, caret_seg_idx = _build_segments(state, theme)
-    lines, caret_line = _layout_lines(segments, caret_seg_idx, inner_cols)
+    blocks, caret_block_idx = _build_word_blocks(state, theme)
+    lines, caret_line = _layout_lines(blocks, caret_block_idx, inner_cols)
 
-    # Viewport: 3 lines with the caret on line 0 (first row) until enough
-    # text has been typed to scroll, after which the caret stays on line 1.
+    # Viewport: 3 lines with the caret on line 1 once content scrolls.
     viewport_top = max(0, caret_line - 1)
     max_top = max(0, len(lines) - 3)
     viewport_top = min(viewport_top, max_top)
@@ -56,17 +55,22 @@ def draw_word_stream(window: "curses.window", state: TestState, theme: Theme) ->
             x += len(text)
 
 
-def _build_segments(state: TestState, theme: Theme) -> tuple[list[tuple[str, int]], int]:
-    """Build a flat list of (text, attr) segments covering every word in the
-    test. Returns (segments, caret_segment_index).
+def _build_word_blocks(state: TestState, theme: Theme) -> tuple[list[tuple[list[tuple[str, int]], int]], int]:
+    """Build one block per word. Each block contains the colored segments for
+    that word plus its trailing space. Total length includes the trailing space.
+
+    Returns (blocks, caret_block_idx) where caret_block_idx is the index of the
+    block currently holding the caret, or -1 if no caret (e.g., finished state).
     """
-    segments: list[tuple[str, int]] = []
-    caret_idx = -1
+    blocks: list[tuple[list[tuple[str, int]], int]] = []
+    caret_block_idx = -1
 
     for idx, word in enumerate(state.words):
         is_current = idx == state.current_index and not word.submitted
+        segments: list[tuple[str, int]] = []
 
         if is_current:
+            caret_block_idx = idx
             # Typed chars in their categorical colors.
             for tc in word.typed:
                 if tc.category == "correct":
@@ -78,18 +82,14 @@ def _build_segments(state: TestState, theme: Theme) -> tuple[list[tuple[str, int
             # Caret + remaining expected chars.
             untyped = word.expected[len(word.typed):]
             if untyped:
-                caret_idx = len(segments)
                 segments.append((untyped[0], theme.fg_caret | curses.A_REVERSE))
                 if len(untyped) > 1:
                     segments.append((untyped[1:], theme.fg_correct | curses.A_DIM))
                 segments.append((" ", theme.fg_dim))
             else:
-                # Cursor is past the expected length (all typed, possibly extras);
-                # park the caret on the trailing space.
-                caret_idx = len(segments)
+                # All chars typed (possibly with extras): park caret on the trailing space.
                 segments.append((" ", theme.fg_caret | curses.A_REVERSE))
         elif word.submitted:
-            # Already-typed word: show what was typed in its final colors.
             for tc in word.typed:
                 if tc.category == "correct":
                     segments.append((tc.typed, theme.fg_correct))
@@ -97,7 +97,6 @@ def _build_segments(state: TestState, theme: Theme) -> tuple[list[tuple[str, int
                     segments.append((tc.expected or tc.typed, theme.fg_error))
                 else:  # extra
                     segments.append((tc.typed, theme.fg_error | curses.A_DIM))
-            # Any expected chars never typed get rendered dim ("missed").
             missed = word.expected[len(word.typed):]
             if missed:
                 segments.append((missed, theme.fg_dim))
@@ -107,34 +106,51 @@ def _build_segments(state: TestState, theme: Theme) -> tuple[list[tuple[str, int
             segments.append((word.expected, theme.fg_dim))
             segments.append((" ", theme.fg_dim))
 
-    return segments, caret_idx
+        length = sum(len(text) for text, _ in segments)
+        blocks.append((segments, length))
+
+    return blocks, caret_block_idx
 
 
 def _layout_lines(
-    segments: list[tuple[str, int]],
-    caret_seg_idx: int,
+    blocks: list[tuple[list[tuple[str, int]], int]],
+    caret_block_idx: int,
     inner_cols: int,
 ) -> tuple[list[list[tuple[str, int]]], int]:
-    """Soft-wrap segments into lines of width ≤ inner_cols. Returns
-    (lines, caret_line_index).
+    """Pack word blocks onto soft-wrapped lines of width ≤ inner_cols.
+    Words never split mid-character: if a block doesn't fit on the current
+    line, the whole block wraps to a new line.
+
+    Pathological fallback: if a single block is longer than inner_cols
+    (e.g., 200-char extras spam), wrap that block at segment granularity
+    rather than overflowing. Returns (lines, caret_line_index).
     """
     lines: list[list[tuple[str, int]]] = [[]]
     line_lens = [0]
     caret_line = 0
 
-    for seg_idx, (text, attr) in enumerate(segments):
-        if line_lens[-1] + len(text) > inner_cols:
+    for block_idx, (segments, length) in enumerate(blocks):
+        # Decide whether this block fits on the current line.
+        if line_lens[-1] > 0 and line_lens[-1] + length > inner_cols:
             lines.append([])
             line_lens.append(0)
-            if text == " ":
-                # don't start a new line with a space
-                if seg_idx == caret_seg_idx:
-                    caret_line = len(lines) - 1
-                continue
-        if seg_idx == caret_seg_idx:
+
+        if block_idx == caret_block_idx:
             caret_line = len(lines) - 1
-        lines[-1].append((text, attr))
-        line_lens[-1] += len(text)
+
+        if length > inner_cols:
+            # Pathological: single block longer than the line. Fall back to
+            # per-segment wrapping for this block alone.
+            for text, attr in segments:
+                if line_lens[-1] + len(text) > inner_cols and line_lens[-1] > 0:
+                    lines.append([])
+                    line_lens.append(0)
+                lines[-1].append((text, attr))
+                line_lens[-1] += len(text)
+        else:
+            for seg in segments:
+                lines[-1].append(seg)
+            line_lens[-1] += length
 
     return lines, caret_line
 
