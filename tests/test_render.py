@@ -236,6 +236,26 @@ def test_word_stream_does_not_split_partially_typed_word_at_edge():
     assert "qrstuv" in rendered.get(3, ""), f"Expected 'qrstuv' on row 3; rendered: {rendered}"
 
 
+def test_result_screen_hint_lists_explicit_keys():
+    """The hint should list every key that actually does something on the
+    result screen, and nothing else (no 'any other key exits').
+    """
+    s = initial_state(("the",), "time", 60.0)
+    s = replace(s, started_at=0.0, ended_at=60.0, finished=True)
+    summary = Summary(
+        wpm=80.0, raw_wpm=85.0, accuracy=95.0, consistency=70.0,
+        correct_chars=400, incorrect_chars=20, extra_chars=5,
+    )
+    win = WindowRecorder(rows=24, cols=80)
+    render.draw_result_screen(win, s, summary, "60s · english-1k", THEME, was_pb=False)
+    line = win.lines().get(22, "")
+    assert "tab/ctrl-r restart" in line
+    assert "esc menu" in line
+    assert "n new" in line
+    assert "q quit" in line
+    assert "any other key" not in line
+
+
 def test_word_stream_long_block_falls_back_to_per_segment_wrap():
     """A single block longer than inner_cols (200-char extras-spam) should not
     crash — it falls back to per-segment wrapping and writes what it can.

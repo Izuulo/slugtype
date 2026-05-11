@@ -265,7 +265,7 @@ def draw_result_screen(
             pass
 
     # Hint
-    hint = "tab restart · esc menu · any other key exits"
+    hint = "tab/ctrl-r restart · esc menu · n new · q quit"
     hint_x = max(2, (cols - len(hint)) // 2)
     try:
         window.addstr(rows - 2, hint_x, hint, theme.fg_dim)
