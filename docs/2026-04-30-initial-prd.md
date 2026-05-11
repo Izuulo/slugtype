@@ -146,7 +146,7 @@ Cold start: `monketerm` → curses takes over, alt-screen activates, you immedia
 
 - **Letters:** advance caret one character. If correct → mark correct; if incorrect → mark incorrect.
 - **Space:** submit current word and advance to next. Space at the start of a word is ignored.
-- **Backspace:** delete one character within the current word. Cannot cross word boundaries (mirrors Monkeytype's default; `freedom mode` is out of scope for v1).
+- **Backspace:** delete one character within the current word. If the current word's buffer is empty, backspace crosses into the previous word **only if that word had any incorrect, extra, or missed characters** (Monkeytype default). Fully-correct previous words stay locked.
 - **Tab:** restart current test with the same config (regenerate words).
 - **Esc:** open command menu (see §5.6).
 - **Ctrl-C:** exit cleanly, restore terminal.

@@ -263,3 +263,76 @@ def test_word_was_perfect_missed_chars():
 def test_word_was_perfect_empty_typed():
     word = WordEntry(expected="the", typed=(), submitted=True)
     assert _word_was_perfect(word) is False
+
+
+def test_backspace_within_word_unchanged():
+    """Existing in-word behavior preserved: backspace removes one char."""
+    s = initial_state(("the",), "time", 60.0)
+    s = apply_keypress(s, _char("t"), now=1.0)
+    s = apply_keypress(s, _char("h"), now=1.0)
+    s = apply_keypress(s, Key(kind=KeyKind.BACKSPACE), now=2.0)
+    assert s.words[0].typed == (TypedChar("t", "t", "correct"),)
+
+
+def test_backspace_at_word_zero_empty_buffer_noop():
+    s = initial_state(("the", "and"), "time", 60.0)
+    s2 = apply_keypress(s, Key(kind=KeyKind.BACKSPACE), now=1.0)
+    assert s2 is s
+
+
+def test_backspace_does_not_cross_perfect_previous_word():
+    """Type 'the' exactly + space + (now on 'and' with empty buffer)
+    + backspace → caret stays on 'and', 'the' stays submitted."""
+    s = initial_state(("the", "and"), "time", 60.0)
+    for ch in "the":
+        s = apply_keypress(s, _char(ch), now=1.0)
+    s = apply_keypress(s, Key(kind=KeyKind.SPACE), now=1.5)
+    assert s.current_index == 1
+    s_after = apply_keypress(s, Key(kind=KeyKind.BACKSPACE), now=2.0)
+    assert s_after is s
+
+
+def test_backspace_crosses_into_imperfect_previous_word():
+    """Type 'thx' (one wrong) + space + backspace → caret jumps back into
+    word 0, which is no longer submitted."""
+    s = initial_state(("the", "and"), "time", 60.0)
+    for ch in "thx":
+        s = apply_keypress(s, _char(ch), now=1.0)
+    s = apply_keypress(s, Key(kind=KeyKind.SPACE), now=1.5)
+    assert s.current_index == 1
+    assert s.words[0].submitted is True
+
+    s_after = apply_keypress(s, Key(kind=KeyKind.BACKSPACE), now=2.0)
+    assert s_after.current_index == 0
+    assert s_after.words[0].submitted is False
+    # The typed buffer is preserved; user's next backspace edits it.
+    assert s_after.words[0].typed == s.words[0].typed
+
+
+def test_backspace_crosses_into_word_with_missed_chars():
+    """Type 'th' (only 2 of 3) + space + backspace → caret jumps back."""
+    s = initial_state(("the", "and"), "time", 60.0)
+    for ch in "th":
+        s = apply_keypress(s, _char(ch), now=1.0)
+    s = apply_keypress(s, Key(kind=KeyKind.SPACE), now=1.5)
+    assert s.current_index == 1
+
+    s_after = apply_keypress(s, Key(kind=KeyKind.BACKSPACE), now=2.0)
+    assert s_after.current_index == 0
+    assert s_after.words[0].submitted is False
+
+
+def test_backspace_after_crossing_then_deletes_last_typed_char():
+    """After crossing back, the next backspace edits the previous word."""
+    s = initial_state(("the", "and"), "time", 60.0)
+    for ch in "thx":
+        s = apply_keypress(s, _char(ch), now=1.0)
+    s = apply_keypress(s, Key(kind=KeyKind.SPACE), now=1.5)
+    s = apply_keypress(s, Key(kind=KeyKind.BACKSPACE), now=2.0)  # crosses
+    # Second backspace should now trim the last typed char of word 0.
+    s = apply_keypress(s, Key(kind=KeyKind.BACKSPACE), now=2.5)
+    assert s.current_index == 0
+    assert s.words[0].typed == (
+        TypedChar("t", "t", "correct"),
+        TypedChar("h", "h", "correct"),
+    )

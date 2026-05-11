@@ -115,7 +115,25 @@ def _word_was_perfect(word: WordEntry) -> bool:
 def _apply_backspace(state: TestState) -> TestState:
     current = state.words[state.current_index]
     if len(current.typed) == 0:
-        return state
+        # Empty buffer at start of a word: consider crossing into the previous word.
+        if state.current_index == 0:
+            return state
+        prev = state.words[state.current_index - 1]
+        if _word_was_perfect(prev):
+            return state
+        # Un-submit the previous word; caret lands at end of its typed buffer.
+        unsubmitted = WordEntry(
+            expected=prev.expected,
+            typed=prev.typed,
+            submitted=False,
+        )
+        new_words = (
+            state.words[: state.current_index - 1]
+            + (unsubmitted,)
+            + state.words[state.current_index :]
+        )
+        return replace(state, words=new_words, current_index=state.current_index - 1)
+    # In-word backspace: trim the last typed char.
     new_word = WordEntry(
         expected=current.expected,
         typed=current.typed[:-1],
