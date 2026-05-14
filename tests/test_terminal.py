@@ -1,7 +1,7 @@
 """Tests for slugtype.terminal — session lifecycle and escape-delay configuration."""
 import os
 
-from slugtype.terminal import _configure_escape_delay
+from slugtype.terminal import MIN_COLS, MIN_ROWS, _configure_escape_delay, is_too_small
 
 
 def test_configure_escape_delay_sets_env_var_to_25(monkeypatch):
@@ -14,9 +14,6 @@ def test_configure_escape_delay_respects_existing_value(monkeypatch):
     monkeypatch.setenv("ESCDELAY", "100")
     _configure_escape_delay()
     assert os.environ["ESCDELAY"] == "100"
-
-
-from slugtype.terminal import MIN_COLS, MIN_ROWS, is_too_small
 
 
 def test_is_too_small_below_min_cols():
