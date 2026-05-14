@@ -158,3 +158,16 @@ def tick(state: TestState, now: float) -> TestState:
 def append_sample(state: TestState, sample: float) -> TestState:
     """Return a new state with `sample` appended to raw_per_second."""
     return replace(state, raw_per_second=state.raw_per_second + (sample,))
+
+
+def apply_pause_offset(state: TestState, pause_seconds: float) -> TestState:
+    """Credit `pause_seconds` back to the runner by shifting started_at
+    forward, so time spent on the 'too small' overlay doesn't count toward
+    the test. No-op when the test hasn't started or has already finished.
+
+    Returns the same instance (not a copy) on the no-op paths so callers
+    can use `out is state` to detect "nothing changed".
+    """
+    if state.started_at is None or state.finished:
+        return state
+    return replace(state, started_at=state.started_at + pause_seconds)

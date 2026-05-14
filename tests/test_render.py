@@ -256,6 +256,34 @@ def test_result_screen_hint_lists_explicit_keys():
     assert "any other key" not in line
 
 
+def test_result_screen_hint_has_blank_row_above_subrow_values():
+    """At borderline terminal heights (21 rows is enough to draw the chart),
+    the hint must not sit directly under the sub-row values — there must be
+    at least one blank row between them so they don't visually mash together.
+    """
+    state = _finished_state_for_render(samples=[50.0] * 60)
+    summary = _summary_for_render()
+    win = WindowRecorder(rows=21, cols=80)
+
+    render.draw_result_screen(win, state, summary, "60s · english-1k", THEME)
+
+    rendered = win.lines()
+    hint_row = next(
+        (y for y, line in rendered.items() if "tab/ctrl-r restart" in line),
+        None,
+    )
+    values_row = next(
+        (y for y, line in rendered.items() if "/" in line and "characters" not in line and "tab" not in line),
+        None,
+    )
+    assert hint_row is not None, "hint must be rendered"
+    assert values_row is not None, "sub-row values must be rendered"
+    assert hint_row - values_row >= 2, (
+        f"hint (row {hint_row}) must be at least 2 rows below sub-row "
+        f"values (row {values_row}) so there's a blank row between them"
+    )
+
+
 def test_word_stream_long_block_falls_back_to_per_segment_wrap():
     """A single block longer than inner_cols (200-char extras-spam) should not
     crash — it falls back to per-segment wrapping and writes what it can.
@@ -264,4 +292,28 @@ def test_word_stream_long_block_falls_back_to_per_segment_wrap():
     win = WindowRecorder(rows=24, cols=80)
     render.draw_word_stream(win, s, THEME)
     # Should produce calls without raising; exact layout is not asserted.
+    assert len(win.calls) > 0
+
+
+def test_draw_too_small_overlay_normal_size_writes_three_lines():
+    win = WindowRecorder(rows=20, cols=50)
+    render.draw_too_small_overlay(win, THEME)
+    rendered = win.lines()
+    joined = "\n".join(rendered.values())
+    assert "terminal too small" in joined
+    assert "resize to at least 60x15" in joined
+    assert "esc to abort" in joined
+
+
+def test_draw_too_small_overlay_tiny_size_does_not_raise():
+    win = WindowRecorder(rows=1, cols=1)
+    # Must not raise; what gets written is best-effort
+    render.draw_too_small_overlay(win, THEME)
+
+
+def test_draw_too_small_overlay_small_size_does_not_raise():
+    # 20x5 — narrower than the longest line (24 chars: "resize to at least 60x15")
+    win = WindowRecorder(rows=5, cols=20)
+    render.draw_too_small_overlay(win, THEME)
+    # Some characters should still be recorded
     assert len(win.calls) > 0

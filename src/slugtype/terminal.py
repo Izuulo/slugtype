@@ -26,6 +26,16 @@ def _configure_escape_delay() -> None:
     os.environ.setdefault("ESCDELAY", "25")
 
 
+def is_too_small(rows: int, cols: int,
+                 min_cols: int = MIN_COLS,
+                 min_rows: int = MIN_ROWS) -> bool:
+    """True if the terminal is below the minimum slugtype needs.
+
+    The minimum boundary is inclusive: is_too_small(MIN_ROWS, MIN_COLS) is False.
+    """
+    return cols < min_cols or rows < min_rows
+
+
 @contextmanager
 def session() -> Iterator["curses.window"]:
     """Enter alt-screen + raw mode for the duration of the block.

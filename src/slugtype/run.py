@@ -9,8 +9,15 @@ from typing import Optional
 
 from slugtype import history, paths, render, stats, words
 from slugtype.input import KeyKind, translate
-from slugtype.state import TestState, apply_keypress, append_sample, initial_state, tick
-from slugtype.terminal import TerminalTooSmallError, session
+from slugtype.state import (
+    TestState,
+    apply_keypress,
+    apply_pause_offset,
+    append_sample,
+    initial_state,
+    tick,
+)
+from slugtype.terminal import TerminalTooSmallError, is_too_small, session
 from slugtype.theme import init_pairs
 
 
@@ -241,6 +248,43 @@ def _result_screen_dispatch(key) -> str:
     return "ignore"
 
 
+def _wait_until_restored(window, theme) -> tuple[str, float]:
+    """Block until the terminal is at least MIN_COLS x MIN_ROWS, the user
+    aborts (Esc or Ctrl-C), or the process is interrupted.
+
+    Returns:
+      ("restored", pause_seconds) — caller resumes (test or result screen).
+      ("aborted",  pause_seconds) — caller aborts.
+
+    The pause_seconds value is the wall-clock time spent waiting. Callers
+    that own a timer should pass it to apply_pause_offset and shift any
+    sample-cadence locals by the same amount.
+
+    During the pause, only Esc / Ctrl-C / KEY_RESIZE are acted on. Other
+    keystrokes are dropped so they can't accidentally dismiss the overlay.
+    """
+    paused_at = time.monotonic()
+    render.draw_too_small_overlay(window, theme)
+    window.timeout(-1)
+    try:
+        while True:
+            keycode = window.getch()
+            if keycode == -1:
+                continue
+            key = translate(keycode)
+            if key.kind is KeyKind.RESIZE:
+                rows, cols = window.getmaxyx()
+                if not is_too_small(rows, cols):
+                    return ("restored", time.monotonic() - paused_at)
+                render.draw_too_small_overlay(window, theme)
+                continue
+            if key.kind in (KeyKind.ESC, KeyKind.CTRL_C):
+                return ("aborted", time.monotonic() - paused_at)
+            # Any other keypress is ignored during pause.
+    finally:
+        window.timeout(50)
+
+
 def run_test(config: Config) -> Optional[stats.Summary]:
     """Run tests in a loop, supporting tab restart. Returns the last summary
     on natural exit, or None if the user aborted (Ctrl-C).
@@ -288,7 +332,20 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                             )
                             continue
                         if key.kind is KeyKind.RESIZE:
-                            render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
+                            rows, cols = window.getmaxyx()
+                            if is_too_small(rows, cols):
+                                result, pause_s = _wait_until_restored(window, theme)
+                                if result == "aborted":
+                                    aborted = True
+                                    break
+                                state = apply_pause_offset(state, pause_s)
+                                last_tick += pause_s
+                                now = time.monotonic()
+                                render.draw(window, state, theme, label, now,
+                                            _live_wpm_for_config(state, now, config))
+                                continue
+                            render.draw(window, state, theme, label, now,
+                                        _live_wpm_for_config(state, now, config))
                             continue
                         new_state = apply_keypress(state, key, now)
                         if new_state is not state:
@@ -338,6 +395,12 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                     key = translate(keycode)
                     decision = _result_screen_dispatch(key)
                     if decision == "redraw":
+                        rows, cols = window.getmaxyx()
+                        if is_too_small(rows, cols):
+                            result, _ = _wait_until_restored(window, theme)
+                            if result == "aborted":
+                                action = "exit"
+                                break
                         render.draw_result_screen(window, state, summary, label, theme, was_pb=was_pb)
                         continue
                     if decision == "restart":
