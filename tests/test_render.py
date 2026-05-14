@@ -256,6 +256,34 @@ def test_result_screen_hint_lists_explicit_keys():
     assert "any other key" not in line
 
 
+def test_result_screen_hint_has_blank_row_above_subrow_values():
+    """At borderline terminal heights (21 rows is enough to draw the chart),
+    the hint must not sit directly under the sub-row values — there must be
+    at least one blank row between them so they don't visually mash together.
+    """
+    state = _finished_state_for_render(samples=[50.0] * 60)
+    summary = _summary_for_render()
+    win = WindowRecorder(rows=21, cols=80)
+
+    render.draw_result_screen(win, state, summary, "60s · english-1k", THEME)
+
+    rendered = win.lines()
+    hint_row = next(
+        (y for y, line in rendered.items() if "tab/ctrl-r restart" in line),
+        None,
+    )
+    values_row = next(
+        (y for y, line in rendered.items() if "/" in line and "characters" not in line and "tab" not in line),
+        None,
+    )
+    assert hint_row is not None, "hint must be rendered"
+    assert values_row is not None, "sub-row values must be rendered"
+    assert hint_row - values_row >= 2, (
+        f"hint (row {hint_row}) must be at least 2 rows below sub-row "
+        f"values (row {values_row}) so there's a blank row between them"
+    )
+
+
 def test_word_stream_long_block_falls_back_to_per_segment_wrap():
     """A single block longer than inner_cols (200-char extras-spam) should not
     crash — it falls back to per-segment wrapping and writes what it can.

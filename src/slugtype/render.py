@@ -232,13 +232,13 @@ def draw_result_screen(
         except curses.error:
             pass
 
-    # Chart between headline and sub-stats — total rows = plot rows + axis + ticks.
-    # Skip when terminal is too short to fit the full layout
-    # (top bar + headline + chart + sub-row + hint).
-    chart_height = 6
+    # Chart between headline and sub-stats — sized to leave room below for
+    # the sub-row, one blank row, and the hint. Reserves 5 rows after the
+    # chart: 1 sub-y labels + 1 sub-y+1 values + 1 blank + 1 hint + 1 buffer.
     chart_y = headline_y + 4
+    chart_height = min(6, rows - chart_y - 5)
     drawn = 0
-    if rows >= 17:
+    if chart_height >= 4:
         chart_width = min(60, cols - 4)
         chart_x = max(2, (cols - chart_width) // 2)
         drawn = _draw_sparkline(
@@ -264,13 +264,16 @@ def draw_result_screen(
         except curses.error:
             pass
 
-    # Hint
+    # Hint — anchored to the bottom, but pushed down to keep at least one
+    # blank row above the sub-row values. Skipped if there's no room at all.
     hint = "tab/ctrl-r restart · esc menu · n new · q quit"
-    hint_x = max(2, (cols - len(hint)) // 2)
-    try:
-        window.addstr(rows - 2, hint_x, hint, theme.fg_dim)
-    except curses.error:
-        pass
+    hint_y = max(rows - 2, sub_y + 3)
+    if hint_y < rows:
+        hint_x = max(2, (cols - len(hint)) // 2)
+        try:
+            window.addstr(hint_y, hint_x, hint, theme.fg_dim)
+        except curses.error:
+            pass
 
     window.refresh()
 
