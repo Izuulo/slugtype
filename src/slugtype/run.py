@@ -399,7 +399,6 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                         if is_too_small(rows, cols):
                             result, _ = _wait_until_restored(window, theme)
                             if result == "aborted":
-                                aborted = True
                                 action = "exit"
                                 break
                         render.draw_result_screen(window, state, summary, label, theme, was_pb=was_pb)
