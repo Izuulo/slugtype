@@ -8,6 +8,7 @@ from slugtype.state import (
     WordEntry,
     initial_state,
     apply_keypress,
+    apply_pause_offset,
     _word_was_perfect,
 )
 
@@ -336,3 +337,30 @@ def test_backspace_after_crossing_then_deletes_last_typed_char():
         TypedChar("t", "t", "correct"),
         TypedChar("h", "h", "correct"),
     )
+
+
+def test_apply_pause_offset_shifts_started_at_forward():
+    s = initial_state(words=("the",), mode="time", duration_s=60.0)
+    s = replace(s, started_at=100.0)
+    out = apply_pause_offset(s, pause_seconds=3.5)
+    assert out.started_at == 103.5
+    # Everything else is preserved
+    assert out.duration_s == 60.0
+    assert out.mode == "time"
+    assert out.ended_at is None
+    assert out.finished is False
+    assert out.words == s.words
+
+
+def test_apply_pause_offset_no_op_when_not_started():
+    s = initial_state(words=("the",), mode="time", duration_s=60.0)
+    assert s.started_at is None
+    out = apply_pause_offset(s, pause_seconds=5.0)
+    assert out is s  # same identity — no replace call
+
+
+def test_apply_pause_offset_no_op_when_finished():
+    s = initial_state(words=("the",), mode="time", duration_s=60.0)
+    s = replace(s, started_at=100.0, ended_at=160.0, finished=True)
+    out = apply_pause_offset(s, pause_seconds=5.0)
+    assert out is s
