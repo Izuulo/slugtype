@@ -395,6 +395,13 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                     key = translate(keycode)
                     decision = _result_screen_dispatch(key)
                     if decision == "redraw":
+                        rows, cols = window.getmaxyx()
+                        if is_too_small(rows, cols):
+                            result, _ = _wait_until_restored(window, theme)
+                            if result == "aborted":
+                                aborted = True
+                                action = "exit"
+                                break
                         render.draw_result_screen(window, state, summary, label, theme, was_pb=was_pb)
                         continue
                     if decision == "restart":
