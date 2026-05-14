@@ -9,7 +9,14 @@ from typing import Optional
 
 from slugtype import history, paths, render, stats, words
 from slugtype.input import KeyKind, translate
-from slugtype.state import TestState, apply_keypress, append_sample, initial_state, tick
+from slugtype.state import (
+    TestState,
+    apply_keypress,
+    apply_pause_offset,
+    append_sample,
+    initial_state,
+    tick,
+)
 from slugtype.terminal import TerminalTooSmallError, is_too_small, session
 from slugtype.theme import init_pairs
 
@@ -325,7 +332,20 @@ def run_test(config: Config) -> Optional[stats.Summary]:
                             )
                             continue
                         if key.kind is KeyKind.RESIZE:
-                            render.draw(window, state, theme, label, now, _live_wpm_for_config(state, now, config))
+                            rows, cols = window.getmaxyx()
+                            if is_too_small(rows, cols):
+                                result, pause_s = _wait_until_restored(window, theme)
+                                if result == "aborted":
+                                    aborted = True
+                                    break
+                                state = apply_pause_offset(state, pause_s)
+                                last_tick += pause_s
+                                now = time.monotonic()
+                                render.draw(window, state, theme, label, now,
+                                            _live_wpm_for_config(state, now, config))
+                                continue
+                            render.draw(window, state, theme, label, now,
+                                        _live_wpm_for_config(state, now, config))
                             continue
                         new_state = apply_keypress(state, key, now)
                         if new_state is not state:
