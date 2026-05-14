@@ -275,6 +275,34 @@ def draw_result_screen(
     window.refresh()
 
 
+def draw_too_small_overlay(window: "curses.window", theme: Theme) -> None:
+    """Paint a centered 'terminal too small' overlay. Best-effort: never
+    raises on tiny window sizes. Erases the window first."""
+    window.erase()
+    rows, cols = window.getmaxyx()
+    lines = (
+        "terminal too small",
+        "resize to at least 60x15",
+        "esc to abort",
+    )
+    block_height = len(lines)
+    start_y = max(0, (rows - block_height) // 2)
+    for i, text in enumerate(lines):
+        text = text[:cols]
+        x = max(0, (cols - len(text)) // 2)
+        y = start_y + i
+        if y >= rows:
+            break
+        try:
+            window.addstr(y, x, text, theme.fg_dim)
+        except curses.error:
+            pass
+    try:
+        window.refresh()
+    except curses.error:
+        pass
+
+
 def _format_elapsed(elapsed_s: float) -> str:
     if elapsed_s >= 60:
         m = int(elapsed_s // 60)
